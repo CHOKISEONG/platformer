@@ -6,6 +6,7 @@ extends CharacterBody2D
 @onready var camera = $Camera
 @onready var dust   = $Dust
 
+
 @export var movementSpeed = 10
 @export var gravityPower = 10
 @export var jumpPower = 20

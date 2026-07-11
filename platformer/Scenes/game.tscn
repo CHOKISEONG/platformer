@@ -1,19 +1,19 @@
-[gd_scene load_steps=20 format=3]
+[gd_scene format=4 uid="uid://dd0jbx0a7osaj"]
 
-[ext_resource type="SpriteFrames" path="res://Sprites/player.tres" id="1"]
-[ext_resource type="Script" path="res://Scripts/player.gd" id="2"]
+[ext_resource type="SpriteFrames" uid="uid://pjsip2ufx2fb" path="res://Sprites/player.tres" id="1"]
+[ext_resource type="Script" uid="uid://cqy0khatb36ba" path="res://Scripts/player.gd" id="2"]
 [ext_resource type="PackedScene" path="res://Projectile/Projectile.tscn" id="3"]
-[ext_resource type="TileSet" path="res://Sprites/tilemap.tres" id="4"]
+[ext_resource type="TileSet" uid="uid://bjm1pk0dh11mc" path="res://Sprites/tilemap.tres" id="4"]
 [ext_resource type="SpriteFrames" path="res://Sprites/bee.tres" id="5"]
 [ext_resource type="SpriteFrames" path="res://Sprites/fly.tres" id="6"]
 [ext_resource type="SpriteFrames" path="res://Sprites/grub.tres" id="7"]
-[ext_resource type="Script" path="res://Scripts/bee.gd" id="13"]
 [ext_resource type="PackedScene" path="res://Gem/Gem.tscn" id="8"]
-[ext_resource type="Texture2D" path="res://extra_source/gem_blue.png" id="9"]
-[ext_resource type="Texture2D" path="res://extra_source/gem_green.png" id="10"]
-[ext_resource type="Texture2D" path="res://extra_source/gem_red.png" id="11"]
-[ext_resource type="Texture2D" path="res://extra_source/gem_yellow.png" id="12"]
-[ext_resource type="Script" path="res://Scripts/ui.gd" id="14"]
+[ext_resource type="Texture2D" uid="uid://dlg2737l0jlf2" path="res://extra_source/gem_blue.png" id="9"]
+[ext_resource type="Texture2D" uid="uid://dcqwbrh003uqj" path="res://extra_source/gem_green.png" id="10"]
+[ext_resource type="Texture2D" uid="uid://dmn1tda4svao2" path="res://extra_source/gem_red.png" id="11"]
+[ext_resource type="Texture2D" uid="uid://bcyf5vwlfu7n7" path="res://extra_source/gem_yellow.png" id="12"]
+[ext_resource type="Script" uid="uid://dlj6g47j6hjgt" path="res://Scripts/bee.gd" id="13"]
+[ext_resource type="Script" uid="uid://be6soybn4cnnf" path="res://Scripts/ui.gd" id="14"]
 
 [sub_resource type="Gradient" id="Gradient_1"]
 colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
@@ -25,12 +25,11 @@ gradient = SubResource("Gradient_1")
 particle_flag_disable_z = true
 emission_shape = 1
 emission_sphere_radius = 4.0
+angle_max = 90.0
 direction = Vector3(0, 0, 0)
 spread = 180.0
 initial_velocity_min = 10.0
 initial_velocity_max = 10.0
-angle_min = 0.0
-angle_max = 90.0
 gravity = Vector3(0, 0, 0)
 damping_min = 5.0
 damping_max = 5.0
@@ -45,32 +44,32 @@ height = 16.0
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_1"]
 size = Vector2(8, 8)
 
-[node name="Game" type="Node2D"]
+[node name="Game" type="Node2D" unique_id=989113171]
 
-[node name="TileMap" type="TileMapLayer" parent="."]
+[node name="TileMap" type="TileMapLayer" parent="." unique_id=1479152196]
 tile_map_data = PackedByteArray("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")
 tile_set = ExtResource("4")
 
-[node name="Player" type="CharacterBody2D" parent="." groups=["npc", "player"]]
+[node name="Player" type="CharacterBody2D" parent="." unique_id=94424358 groups=["npc", "player"]]
 script = ExtResource("2")
 projectile = ExtResource("3")
 metadata/_edit_group_ = true
 
-[node name="Dust" type="GPUParticles2D" parent="Player"]
+[node name="Dust" type="GPUParticles2D" parent="Player" unique_id=1490096861]
 position = Vector2(0, 10)
 amount = 16
 process_material = SubResource("ParticleProcessMaterial_1")
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Player"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Player" unique_id=1932527355]
 position = Vector2(0, 8)
 sprite_frames = ExtResource("1")
 animation = &"idle"
 offset = Vector2(0, -8)
 
-[node name="Collision" type="CollisionShape2D" parent="Player"]
+[node name="Collision" type="CollisionShape2D" parent="Player" unique_id=1393789690]
 shape = SubResource("CapsuleShape2D_1")
 
-[node name="Camera" type="Camera2D" parent="Player"]
+[node name="Camera" type="Camera2D" parent="Player" unique_id=353109528]
 zoom = Vector2(4, 4)
 limit_left = -240
 limit_top = -200
@@ -79,9 +78,9 @@ limit_bottom = 120
 limit_smoothed = true
 position_smoothing_enabled = true
 
-[node name="Level" type="Node2D" parent="."]
+[node name="Level" type="Node2D" parent="." unique_id=1353654923]
 
-[node name="Bee" type="CharacterBody2D" parent="Level"]
+[node name="Bee" type="CharacterBody2D" parent="Level" unique_id=267441380]
 position = Vector2(40, 8)
 collision_layer = 2
 collision_mask = 2
@@ -89,18 +88,18 @@ script = ExtResource("13")
 movementSpeed = 30
 metadata/_edit_group_ = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Level/Bee"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Bee" unique_id=909754731]
 position = Vector2(0, -4)
 sprite_frames = ExtResource("5")
 autoplay = "default"
 frame = 1
 flip_h = true
 
-[node name="Shape" type="CollisionShape2D" parent="Level/Bee"]
+[node name="Shape" type="CollisionShape2D" parent="Level/Bee" unique_id=1565230153]
 position = Vector2(0, -2)
 shape = SubResource("RectangleShape2D_1")
 
-[node name="Bee2" type="CharacterBody2D" parent="Level"]
+[node name="Bee2" type="CharacterBody2D" parent="Level" unique_id=2003353794]
 position = Vector2(216, -48)
 collision_layer = 2
 collision_mask = 2
@@ -108,18 +107,18 @@ script = ExtResource("13")
 movementSpeed = 30
 metadata/_edit_group_ = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Level/Bee2"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Bee2" unique_id=347304976]
 position = Vector2(0, -4)
 sprite_frames = ExtResource("5")
 autoplay = "default"
 frame = 1
 flip_h = true
 
-[node name="Shape" type="CollisionShape2D" parent="Level/Bee2"]
+[node name="Shape" type="CollisionShape2D" parent="Level/Bee2" unique_id=152372936]
 position = Vector2(0, -2)
 shape = SubResource("RectangleShape2D_1")
 
-[node name="Fly" type="CharacterBody2D" parent="Level"]
+[node name="Fly" type="CharacterBody2D" parent="Level" unique_id=1401838711]
 position = Vector2(16, -24)
 collision_layer = 2
 collision_mask = 2
@@ -128,17 +127,17 @@ movementSpeed = 30
 orientation = 1
 metadata/_edit_group_ = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Level/Fly"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Fly" unique_id=945220700]
 position = Vector2(0, -4)
 sprite_frames = ExtResource("6")
 autoplay = "default"
 flip_h = true
 
-[node name="Shape" type="CollisionShape2D" parent="Level/Fly"]
+[node name="Shape" type="CollisionShape2D" parent="Level/Fly" unique_id=362890514]
 position = Vector2(0, -2)
 shape = SubResource("RectangleShape2D_1")
 
-[node name="Fly2" type="CharacterBody2D" parent="Level"]
+[node name="Fly2" type="CharacterBody2D" parent="Level" unique_id=1915135668]
 position = Vector2(440, -104)
 collision_layer = 2
 collision_mask = 2
@@ -147,17 +146,17 @@ movementSpeed = 30
 orientation = 1
 metadata/_edit_group_ = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Level/Fly2"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Fly2" unique_id=821406035]
 position = Vector2(0, -4)
 sprite_frames = ExtResource("6")
 autoplay = "default"
 flip_h = true
 
-[node name="Shape" type="CollisionShape2D" parent="Level/Fly2"]
+[node name="Shape" type="CollisionShape2D" parent="Level/Fly2" unique_id=111262327]
 position = Vector2(0, -2)
 shape = SubResource("RectangleShape2D_1")
 
-[node name="Grub" type="CharacterBody2D" parent="Level"]
+[node name="Grub" type="CharacterBody2D" parent="Level" unique_id=1076731886]
 position = Vector2(200, 12)
 collision_layer = 2
 collision_mask = 2
@@ -166,17 +165,17 @@ movementSpeed = 30
 orientation = 1
 metadata/_edit_group_ = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Level/Grub"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Grub" unique_id=1965134699]
 sprite_frames = ExtResource("7")
 autoplay = "default"
 offset = Vector2(0, -4)
 flip_h = true
 
-[node name="Shape" type="CollisionShape2D" parent="Level/Grub"]
+[node name="Shape" type="CollisionShape2D" parent="Level/Grub" unique_id=1260408516]
 position = Vector2(0, -2)
 shape = SubResource("RectangleShape2D_1")
 
-[node name="Grub2" type="CharacterBody2D" parent="Level"]
+[node name="Grub2" type="CharacterBody2D" parent="Level" unique_id=1394021393]
 position = Vector2(368, -4)
 collision_layer = 2
 collision_mask = 2
@@ -185,69 +184,69 @@ movementSpeed = 30
 orientation = 1
 metadata/_edit_group_ = true
 
-[node name="Sprite" type="AnimatedSprite2D" parent="Level/Grub2"]
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Grub2" unique_id=1182945545]
 sprite_frames = ExtResource("7")
 autoplay = "default"
 frame = 1
 offset = Vector2(0, -4)
 flip_h = true
 
-[node name="Shape" type="CollisionShape2D" parent="Level/Grub2"]
+[node name="Shape" type="CollisionShape2D" parent="Level/Grub2" unique_id=995786718]
 position = Vector2(0, -2)
 shape = SubResource("RectangleShape2D_1")
 
-[node name="Gems" type="Node2D" parent="."]
+[node name="Gems" type="Node2D" parent="." unique_id=246871458]
 
-[node name="Gem" parent="Gems" instance=ExtResource("8")]
+[node name="Gem" parent="Gems" unique_id=475696623 instance=ExtResource("8")]
 position = Vector2(8, 40)
 gemTexture = ExtResource("9")
 
-[node name="Gem2" parent="Gems" instance=ExtResource("8")]
+[node name="Gem2" parent="Gems" unique_id=538587696 instance=ExtResource("8")]
 position = Vector2(-104, 8)
 gemTexture = ExtResource("10")
 
-[node name="Gem3" parent="Gems" instance=ExtResource("8")]
+[node name="Gem3" parent="Gems" unique_id=339446877 instance=ExtResource("8")]
 position = Vector2(-200, -8)
 gemTexture = ExtResource("11")
 
-[node name="Gem4" parent="Gems" instance=ExtResource("8")]
+[node name="Gem4" parent="Gems" unique_id=704954453 instance=ExtResource("8")]
 position = Vector2(-24, -56)
 gemTexture = ExtResource("12")
 
-[node name="Gem5" parent="Gems" instance=ExtResource("8")]
+[node name="Gem5" parent="Gems" unique_id=1775289311 instance=ExtResource("8")]
 position = Vector2(104, -40)
 gemTexture = ExtResource("10")
 
-[node name="Gem6" parent="Gems" instance=ExtResource("8")]
+[node name="Gem6" parent="Gems" unique_id=1752538343 instance=ExtResource("8")]
 position = Vector2(216, -104)
 gemTexture = ExtResource("9")
 
-[node name="Gem7" parent="Gems" instance=ExtResource("8")]
+[node name="Gem7" parent="Gems" unique_id=1545773647 instance=ExtResource("8")]
 position = Vector2(360, -8)
 gemTexture = ExtResource("11")
 
-[node name="Gem8" parent="Gems" instance=ExtResource("8")]
+[node name="Gem8" parent="Gems" unique_id=9472626 instance=ExtResource("8")]
 position = Vector2(472, -88)
 gemTexture = ExtResource("12")
 
-[node name="UI" type="CanvasLayer" parent="." groups=["ui"]]
+[node name="UI" type="CanvasLayer" parent="." unique_id=1689846964 groups=["ui"]]
 script = ExtResource("14")
 
-[node name="Counter" type="HBoxContainer" parent="UI"]
+[node name="Counter" type="HBoxContainer" parent="UI" unique_id=1168139901]
 offset_left = 16.0
 offset_top = 12.0
 offset_right = 200.0
 offset_bottom = 52.0
 
-[node name="Icon" type="TextureRect" parent="UI/Counter"]
+[node name="Icon" type="TextureRect" parent="UI/Counter" unique_id=2032988293]
+texture_filter = 1
 custom_minimum_size = Vector2(32, 32)
 layout_mode = 2
-texture_filter = 1
 texture = ExtResource("9")
 expand_mode = 1
 stretch_mode = 5
 
-[node name="Count" type="Label" parent="UI/Counter"]
+[node name="Count" type="Label" parent="UI/Counter" unique_id=1777298284]
 layout_mode = 2
 theme_override_colors/font_color = Color(0.34, 0.2, 0.14, 1)
 theme_override_font_sizes/font_size = 26
