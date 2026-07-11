@@ -7,11 +7,17 @@ extends Node2D
 #  [6] 플레이어 시작 지점
 #  [7] 물 (가득)   [8] 물 (수면 높게)   [9] 물 (수면 낮게)
 #  [0] 원웨이 플랫폼 (아래에서는 통과, 위에서는 착지)
+#  [Q] 용암 (가득)   [W] 용암 (수면 높게)   [E] 용암 (수면 낮게)
+#  [R] 매달림 원웨이 — 칸 아래쪽에 붙는 얇은 발판. 점프로 통과하고, 매달린 채 지나갈 수 있다
 #
 #  좌클릭: 배치 / 우클릭: 삭제 (오브젝트가 있으면 오브젝트 먼저)
 #  휠: 확대·축소 / 휠 버튼 드래그: 화면 이동
+#  방향키: 맵 전체를 1칸씩 이동 (경계 밖으로 나간 타일/오브젝트는 잘린다)
 #  TAB: 에디터 <-> 플레이 모드 전환 (ESC: 플레이 종료)
 #  F11: 전체화면 <-> 창 모드 전환
+#
+# 에디터는 EDITOR_RESOLUTION(1920x1080) 해상도로 동작한다.
+# 플레이 모드로 전환하면 게임 해상도(project.godot 설정)로 되돌려 실제 게임과 같은 시야로 테스트한다.
 #
 # 맵은 maps/<이름>.json 파일로 저장/불러오기 된다.
 # 에디터에서 실행할 때는 프로젝트 안(res://maps)이라 git으로 공유되고,
@@ -21,12 +27,19 @@ extends Node2D
 
 const FRUIT_SCENE = preload("res://Fruit/Fruit.tscn")
 const WATER_SCENE = preload("res://water/Water.tscn")
+const LAVA_SCENE = preload("res://lava/Lava.tscn")
+const CLING_PLATFORM_SCENE = preload("res://platform/ClingPlatform.tscn")
 const PLAYER_SCENE = preload("res://Player/ColorPlayer.tscn")
 
 const CELL = 16
 const TILE_SOURCE = 0
 const MIN_SIZE = 4
-const MAX_SIZE = 200
+const MAX_SIZE = 1000 # 격자 오버레이가 매 프레임 (가로+세로)줄을 그리므로 무한정 키우지 않는다
+
+# 에디터 작업 해상도 — 게임 해상도(project.godot 설정)와 무관하게 고정해
+# 한 화면에서 넓은 맵을 보며 작업한다.
+# 플레이 모드에서는 게임 해상도로 되돌린다 — 실제 게임과 같은 시야로 테스트하기 위해 (startPlay/stopPlay)
+const EDITOR_RESOLUTION = Vector2i(1920, 1080)
 
 # 타일 종류 -> 타일셋 아틀라스 좌표
 const TILE_TYPES = {
@@ -49,8 +62,15 @@ const WATER_LEVELS = {
 	"low": Water.Level.LOW,
 }
 
+# 용암 종류 -> 수위
+const LAVA_LEVELS = {
+	"full": Lava.Level.FULL,
+	"high": Lava.Level.HIGH,
+	"low": Lava.Level.LOW,
+}
+
 enum Mode { EDIT, PLAY }
-enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, PLATFORM }
+enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, PLATFORM, LAVA_FULL, LAVA_HIGH, LAVA_LOW, CLING_PLATFORM }
 
 const TOOL_INFO = {
 	Tool.FLOOR: { "name": "바닥 타일", "tile": "floor" },
@@ -63,6 +83,10 @@ const TOOL_INFO = {
 	Tool.WATER_HIGH: { "name": "물 (수면 높게)", "water": "high" },
 	Tool.WATER_LOW: { "name": "물 (수면 낮게)", "water": "low" },
 	Tool.PLATFORM: { "name": "원웨이 플랫폼", "tile": "platform" },
+	Tool.LAVA_FULL: { "name": "용암 (가득)", "lava": "full" },
+	Tool.LAVA_HIGH: { "name": "용암 (수면 높게)", "lava": "high" },
+	Tool.LAVA_LOW: { "name": "용암 (수면 낮게)", "lava": "low" },
+	Tool.CLING_PLATFORM: { "name": "매달림 원웨이 (칸 아래)", "clingPlatform": "bottom" },
 }
 
 # 맵 저장 폴더 — 에디터 실행 시에는 프로젝트 폴더, export 빌드에서는 사용자 데이터 폴더
@@ -83,7 +107,7 @@ var mapWidth = 40
 var mapHeight = 15
 var playerStartCell = Vector2i(2, 11)
 
-# 셀 좌표(Vector2i) -> { "type": "fruit"|"water", "variant": "red"|"full"|..., "node": 인스턴스 }
+# 셀 좌표(Vector2i) -> { "type": "fruit"|"water"|"lava"|"clingPlatform", "variant": "red"|"full"|..., "node": 인스턴스 }
 # 오브젝트의 원본 데이터. 노드는 이 데이터로부터 언제든 다시 만들어진다.
 var objects = {}
 
@@ -91,6 +115,9 @@ var player = null
 var zoomLevel = 2.0
 var hoverCell = Vector2i(-1, -1)
 var overlay
+
+# 프로젝트 설정의 게임 해상도 — 플레이 모드에서 복원할 값 (_ready에서 기억)
+var gameResolution
 
 # UI
 var uiPanel
@@ -114,6 +141,10 @@ func _ready():
 
 	# 에디터는 전체화면으로 시작 (F11 또는 버튼으로 창 모드 전환)
 	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+
+	# 게임보다 큰 해상도로 작업 — 플레이 모드에서 복원할 게임 해상도를 먼저 기억해 둔다
+	gameResolution = get_window().content_scale_size
+	get_window().content_scale_size = EDITOR_RESOLUTION
 
 	overlay = EditorOverlay.new()
 	overlay.z_index = 100
@@ -175,6 +206,61 @@ func resizeMap(width, height):
 	syncUI()
 	refresh()
 	setStatus("맵 크기: %d x %d" % [mapWidth, mapHeight])
+
+# 맵 전체(타일/오브젝트/시작 지점)를 1칸 이동. 경계 밖으로 나간 것은 잘리며 상태줄에 알린다.
+func shiftMap(offset):
+
+	var movedTiles = {}
+	var clippedTiles = 0
+
+	for cell in tileMap.get_used_cells():
+
+		var target = cell + offset
+
+		if isInside(target):
+			movedTiles[target] = tileMap.get_cell_atlas_coords(cell)
+		else:
+			clippedTiles += 1
+
+	tileMap.clear()
+
+	for cell in movedTiles:
+		tileMap.set_cell(cell, TILE_SOURCE, movedTiles[cell])
+
+	var movedObjects = {}
+	var clippedObjects = 0
+
+	for cell in objects:
+
+		var data = objects[cell]
+		var target = cell + offset
+
+		if isInside(target):
+			movedObjects[target] = data
+			if is_instance_valid(data.node):
+				data.node.position = cellCenter(target)
+				data.node.reset_physics_interpolation() # 순간이동이 잔상처럼 보간되지 않도록
+		else:
+			clippedObjects += 1
+			if is_instance_valid(data.node):
+				data.node.queue_free()
+
+	objects = movedObjects
+
+	playerStartCell = (playerStartCell + offset).clamp(Vector2i(0, 0), Vector2i(mapWidth - 1, mapHeight - 1))
+
+	refresh()
+
+	var directionNames = {
+		Vector2i.LEFT: "왼쪽", Vector2i.RIGHT: "오른쪽",
+		Vector2i.UP: "위", Vector2i.DOWN: "아래",
+	}
+	var message = "맵 이동: " + directionNames.get(offset, str(offset))
+
+	if clippedTiles > 0 or clippedObjects > 0:
+		message += " — 경계 밖으로 잘림: 타일 %d, 오브젝트 %d" % [clippedTiles, clippedObjects]
+
+	setStatus(message)
 
 func isInside(cell):
 	return cell.x >= 0 and cell.y >= 0 and cell.x < mapWidth and cell.y < mapHeight
@@ -247,6 +333,14 @@ func handleKey(event):
 		KEY_8: selectTool(Tool.WATER_HIGH)
 		KEY_9: selectTool(Tool.WATER_LOW)
 		KEY_0: selectTool(Tool.PLATFORM)
+		KEY_Q: selectTool(Tool.LAVA_FULL)
+		KEY_W: selectTool(Tool.LAVA_HIGH)
+		KEY_E: selectTool(Tool.LAVA_LOW)
+		KEY_R: selectTool(Tool.CLING_PLATFORM)
+		KEY_LEFT: shiftMap(Vector2i.LEFT)
+		KEY_RIGHT: shiftMap(Vector2i.RIGHT)
+		KEY_UP: shiftMap(Vector2i.UP)
+		KEY_DOWN: shiftMap(Vector2i.DOWN)
 
 func mouseCell():
 	return tileMap.local_to_map(tileMap.get_local_mouse_position())
@@ -279,6 +373,10 @@ func paint(cell, erase):
 		placeObject(cell, "fruit", info.fruit)
 	elif info.has("water"):
 		placeObject(cell, "water", info.water)
+	elif info.has("lava"):
+		placeObject(cell, "lava", info.lava)
+	elif info.has("clingPlatform"):
+		placeObject(cell, "clingPlatform", info.clingPlatform)
 	elif currentTool == Tool.PLAYER_START:
 		playerStartCell = cell
 
@@ -304,6 +402,11 @@ func spawnObject(cell, type, variant):
 		"water":
 			node = WATER_SCENE.instantiate()
 			node.waterLevel = WATER_LEVELS[variant]
+		"lava":
+			node = LAVA_SCENE.instantiate()
+			node.lavaLevel = LAVA_LEVELS[variant]
+		"clingPlatform":
+			node = CLING_PLATFORM_SCENE.instantiate() # 변형은 아직 bottom 하나뿐
 
 	node.position = cellCenter(cell)
 	objectsRoot.add_child(node)
@@ -349,6 +452,9 @@ func startPlay():
 
 	mode = Mode.PLAY
 
+	# 실제 게임과 같은 시야로 테스트하도록 게임 해상도로 되돌린다
+	get_window().content_scale_size = gameResolution
+
 	var saved = autoSave()
 
 	rebuildObjects()
@@ -376,6 +482,8 @@ func stopPlay():
 
 	mode = Mode.EDIT
 
+	get_window().content_scale_size = EDITOR_RESOLUTION # 에디터 작업 해상도로 복귀
+
 	if is_instance_valid(player):
 		player.queue_free()
 	player = null
@@ -394,6 +502,14 @@ func toggleFullscreen():
 
 	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+
+		# 창 크기를 에디터 해상도에 맞춘다 — 프로젝트 기본 창(1024x600)에 캔버스가
+		# 짓눌려 보이지 않도록. 모니터(작업 표시줄 제외)보다 크면 그만큼 줄여서 중앙에 놓는다
+		var usable = DisplayServer.screen_get_usable_rect()
+		var windowSize = EDITOR_RESOLUTION.min(usable.size)
+
+		get_window().size = windowSize
+		get_window().position = usable.position + (usable.size - windowSize) / 2
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
@@ -457,7 +573,7 @@ func writeMap(fileName):
 	for cell in objects:
 		var object = objects[cell]
 		var entry = { "x": cell.x, "y": cell.y, "type": object.type }
-		entry[object.type] = object.variant # "fruit" 또는 "water" 필드에 종류 저장
+		entry[object.type] = object.variant # "fruit"/"water"/"lava" 필드에 종류 저장
 		data.objects.append(entry)
 
 	DirAccess.make_dir_recursive_absolute(mapsDir)
@@ -517,6 +633,10 @@ func loadMap():
 			placeObject(cell, "fruit", object.fruit)
 		elif type == "water" and WATER_LEVELS.has(object.get("water", "")):
 			placeObject(cell, "water", object.water)
+		elif type == "lava" and LAVA_LEVELS.has(object.get("lava", "")):
+			placeObject(cell, "lava", object.lava)
+		elif type == "clingPlatform":
+			placeObject(cell, "clingPlatform", "bottom") # 변형은 아직 bottom 하나뿐
 
 	var start = data.get("playerStart", {})
 	playerStartCell = Vector2i(int(start.get("x", 2)), int(start.get("y", mapHeight - 4)))
@@ -629,16 +749,19 @@ func buildUI():
 	ui.layer = 10
 	add_child(ui)
 
+	# 이하 글자 크기는 1024x600 시절 값의 약 1.3배 —
+	# 에디터 해상도(1920x1080)에서도 체감 크기가 비슷하게 유지되도록 키운 것
+
 	# 편집 패널
 	uiPanel = PanelContainer.new()
 	uiPanel.position = Vector2(10, 10)
 	ui.add_child(uiPanel)
 
 	var box = VBoxContainer.new()
-	box.custom_minimum_size.x = 220
+	box.custom_minimum_size.x = 280
 	uiPanel.add_child(box)
 
-	box.add_child(makeLabel("맵 크기", 13))
+	box.add_child(makeLabel("맵 크기", 16))
 
 	var sizeRow = HBoxContainer.new()
 	box.add_child(sizeRow)
@@ -647,24 +770,37 @@ func buildUI():
 	widthBox.min_value = MIN_SIZE
 	widthBox.max_value = MAX_SIZE
 	widthBox.value = mapWidth
-	widthBox.custom_minimum_size.x = 64
+	widthBox.custom_minimum_size.x = 80
 	sizeRow.add_child(widthBox)
 
-	sizeRow.add_child(makeLabel("x", 13))
+	sizeRow.add_child(makeLabel("x", 16))
 
 	heightBox = SpinBox.new()
 	heightBox.min_value = MIN_SIZE
 	heightBox.max_value = MAX_SIZE
 	heightBox.value = mapHeight
-	heightBox.custom_minimum_size.x = 64
+	heightBox.custom_minimum_size.x = 80
 	sizeRow.add_child(heightBox)
 
 	var applyButton = makeButton("적용")
-	applyButton.pressed.connect(func(): resizeMap(int(widthBox.value), int(heightBox.value)))
+	applyButton.pressed.connect(func():
+		commitSizeBoxes()
+		resizeMap(int(widthBox.value), int(heightBox.value)))
 	sizeRow.add_child(applyButton)
 
+	box.add_child(makeLabel("맵 전체 이동 (방향키)", 16))
+
+	var shiftRow = HBoxContainer.new()
+	box.add_child(shiftRow)
+
+	for entry in [["◀", Vector2i.LEFT], ["▲", Vector2i.UP], ["▼", Vector2i.DOWN], ["▶", Vector2i.RIGHT]]:
+		var shiftButton = makeButton(entry[0])
+		shiftButton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		shiftButton.pressed.connect(func(): shiftMap(entry[1]))
+		shiftRow.add_child(shiftButton)
+
 	box.add_child(HSeparator.new())
-	box.add_child(makeLabel("파일 이름 (%s/)" % mapsDir, 13))
+	box.add_child(makeLabel("파일 이름 (%s/)" % mapsDir, 16))
 
 	fileEdit = LineEdit.new()
 	fileEdit.text = "map1"
@@ -686,20 +822,25 @@ func buildUI():
 
 	var clearButton = makeButton("새 맵")
 	clearButton.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	clearButton.pressed.connect(func(): newMap(int(widthBox.value), int(heightBox.value)))
+	clearButton.pressed.connect(func():
+		commitSizeBoxes()
+		newMap(int(widthBox.value), int(heightBox.value)))
 	fileRow.add_child(clearButton)
 
 	box.add_child(HSeparator.new())
 
-	toolLabel = makeLabel("", 14)
+	toolLabel = makeLabel("", 18)
 	box.add_child(toolLabel)
 
 	var help = makeLabel("[1] 바닥  [2] 벽  [0] 플랫폼
 [3] 빨강  [4] 파랑  [5] 초록
 [6] 시작 지점
 [7] 물 가득  [8] 물 높게  [9] 물 낮게
+[Q] 용암 가득  [W] 용암 높게  [E] 용암 낮게
+[R] 매달림 원웨이 (칸 아래)
+[방향키] 맵 전체 1칸 이동
 좌클릭 배치 · 우클릭 삭제
-휠 줌 · 휠 드래그 이동", 12)
+휠 줌 · 휠 드래그 이동", 15)
 	help.modulate = Color(1, 1, 1, 0.6)
 	box.add_child(help)
 
@@ -715,11 +856,12 @@ func buildUI():
 	syncFullscreenButton()
 
 	# 상태 표시줄
-	statusLabel = makeLabel("좌클릭 배치 · 우클릭 삭제 · TAB 플레이", 13)
+	statusLabel = makeLabel("좌클릭 배치 · 우클릭 삭제 · TAB 플레이", 16)
 	statusLabel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 10)
 	ui.add_child(statusLabel)
 
 	# 플레이 모드 안내
+	# 플레이 모드 전용이라 게임 해상도(1024x600) 기준 크기 그대로 둔다
 	playHint = makeLabel("플레이 모드  —  TAB: 에디터로 돌아가기", 15)
 	playHint.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP, Control.PRESET_MODE_MINSIZE, 12)
 	playHint.visible = false
@@ -740,6 +882,13 @@ func makeButton(text):
 	button.focus_mode = Control.FOCUS_NONE
 
 	return button
+
+# 타이핑 중인 크기 값을 확정한다.
+# 버튼이 포커스를 가져가지 않아(FOCUS_NONE) SpinBox가 입력 텍스트를 value에
+# 반영하지 않은 채 남아 있을 수 있다 — Enter 없이 바로 버튼을 눌러도 적용되도록 한다.
+func commitSizeBoxes():
+	widthBox.apply()
+	heightBox.apply()
 
 func syncUI():
 	widthBox.value = mapWidth

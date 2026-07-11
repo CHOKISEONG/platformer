@@ -12,25 +12,25 @@ enum ColorState { DARK, RED, BLUE, GREEN }
 const STATS = {
 	ColorState.DARK: {
 		"color": Color(0.04, 0.04, 0.06), # 배경과 같은 색 — 어둠 속에서 보이지 않음
-		"moveSpeed": 7,
+		"moveSpeed": 5.6,
 		"jumpPower": 0,       # 점프 불가 — 걷기만 가능
 		"ability": "",
 	},
 	ColorState.RED: {
 		"color": Color(0.87, 0.22, 0.22),
-		"moveSpeed": 10,
+		"moveSpeed": 8,
 		"jumpPower": 26,      # 3블럭(48px) 점프 — 최고점 약 54px, 4블럭은 못 넘는다
-		"ability": "",
+		"ability": "lavaWalk", # 용암을 밟고 건널 수 있다 (lava.gd)
 	},
 	ColorState.BLUE: {
 		"color": Color(0.27, 0.52, 0.93),
-		"moveSpeed": 10,
-		"jumpPower": 13,      # 점프력 낮음
-		"ability": "freeze",  # 물 얼리기 (추후 구현)
+		"moveSpeed": 8,
+		"jumpPower": 17,      # 1블럭(16px) 점프 — 최고점 약 23px, 2블럭은 못 넘는다
+		"ability": "freeze",  # 닿은 물과 연결된 물 전체를 얼려 밟을 수 있게 만든다 (water.gd)
 	},
 	ColorState.GREEN: {
 		"color": Color(0.32, 0.78, 0.36),
-		"moveSpeed": 11,
+		"moveSpeed": 8.8,
 		"jumpPower": 22,      # 2블럭(32px) 점프 — 최고점 약 38px, 3블럭은 못 넘는다
 		"ability": "cling",   # 천장에 닿으면 매달린다 (applyCling)
 	},
@@ -39,6 +39,12 @@ const STATS = {
 # 초록 상태 천장 밀착: 매달린 동안 천장 쪽으로 눌러주는 속도 px/s.
 # 바닥 밀착(gravity = 10)과 대칭 — 접촉이 끊기지 않을 만큼만 누른다.
 const CLING_PUSH = 10.0
+
+# 매달림 유지 유예: 천장 타일 이음새를 지날 때 is_on_ceiling()이 1~2프레임 끊겨도
+# 이 시간(초) 동안은 계속 위로 밀며 재접촉을 기다린다 — 없으면 이음새마다 가끔 떨어진다.
+# 코요테 타임과 같은 성격의 관용치. 절반인 이유: 진짜 천장 끝에서는 유예 동안
+# 허공에 떠 있는 것처럼 보이는데, 그 거리(최고 속도 기준 약 4px)를 줄이기 위해
+const CLING_GRACE_TIME = 0.05
 
 # 수평 가감속 px/s² — lerp와 달리 목표 속도와 0에 정확히 도달해
 # 서브픽셀 속도로 기어가는 구간이 없다
@@ -57,7 +63,11 @@ const JUMP_BUFFER_TIME = 0.1
 @onready var sprite = $Sprite
 @onready var eyes = $Eyes
 
-@export var gravityPower = 10
+# 중력 가속 (프레임당 px/s). jump()의 배수 8과 짝으로 튜닝된 값 —
+# 원래 10·10 조합에서 점프 초속 0.8배, 중력 0.64배로 줄인 것이다.
+# 최대 높이는 초속²/중력이라 그대로(0.8² = 0.64)이고, 체공 시간은 초속/중력이라 25% 길어진다.
+# 한쪽만 바꾸면 점프 높이가 변해 "3블럭은 넘고 4블럭은 못 넘는" 경계가 깨진다
+@export var gravityPower = 6.4
 
 # Private
 
@@ -71,6 +81,7 @@ var gravity = 0
 var clinging = false
 var coyoteTimer = 0.0 # 남은 코요테 타임 — 바닥 위에서는 항상 가득 채워진다
 var jumpBufferTimer = 0.0 # 남은 점프 버퍼 — 점프 키를 누른 순간 가득 채워진다
+var clingGraceTimer = 0.0 # 남은 매달림 유예 — 천장에 닿아 있는 동안은 항상 가득 채워진다
 
 var initialPosition
 
@@ -100,7 +111,7 @@ func _physics_process(delta):
 
 	applyControls()
 	applyGravity()
-	applyCling()
+	applyCling(delta)
 	applyAnimation()
 
 	# Out of bounds
@@ -146,18 +157,18 @@ func die():
 	clinging = false
 	coyoteTimer = 0.0
 	jumpBufferTimer = 0.0
+	clingGraceTimer = 0.0
 
 	reset_physics_interpolation() # 순간이동이 잔상처럼 보간되지 않도록
 
 	get_tree().call_group("fruits", "respawn")
+	get_tree().call_group("water", "unfreeze") # 얼려 둔 물도 전부 되돌린다
 
-# 상태별 능력 발동 지점 (추후 구현)
+# 물 등 외부 오브젝트가 덕 타이핑으로 현재 능력을 확인할 때 사용 (water.gd)
 
-func useAbility():
+func hasAbility(abilityName):
 
-	match STATS[state].ability:
-		"freeze":
-			pass # TODO: 물 얼리기
+	return STATS[state].ability == abilityName
 
 # Controls
 
@@ -194,29 +205,41 @@ func applyGravity():
 		gravity = 0
 
 		# 초록 상태는 떨어지는 대신 천장에 매달린다.
-		# 상승 중 충돌에서만 시작하므로, 놓은 직후(gravity >= 0) 다시 붙지 않는다.
+		# 상승 중 충돌에서만 시작하므로, 매달림이 풀려 떨어지는 중(gravity >= 0)에는 다시 붙지 않는다.
 		if STATS[state].ability == "cling":
 			clinging = true
 
 func jump():
 
-	gravity = -jumpPower * 10
+	gravity = -jumpPower * 8 # 배수 8은 gravityPower(6.4)와 짝 — 그쪽 주석 참고
 	coyoteTimer = 0.0 # 남은 시간으로 공중에서 한 번 더 점프하지 못하게
 	jumpBufferTimer = 0.0 # 버퍼에 남은 입력으로 연속 점프하지 못하게
 
 # 초록 상태 천장 밀착: 상승 중 천장에 닿으면 매달린다 (applyGravity에서 시작).
 # 매달린 동안에도 좌우 이동은 그대로 가능해 천장을 타고 움직일 수 있다.
-# 점프 키를 다시 누르거나 천장이 끝나 접촉이 사라지면
+# 점프 키로는 해제되지 않는다 — 매달려 건너는 도중 점프 입력으로 실수로 떨어지지 않게.
+# 천장이 끝나 접촉이 사라지거나 상태가 바뀌면(과일/사망)
 # 점프 정점에서 내려올 때와 같은 곡선(gravity 0부터 가속)으로 떨어진다.
 
-func applyCling():
+func applyCling(delta):
 
 	if !clinging:
 		return
 
-	if STATS[state].ability != "cling" or Input.is_action_just_pressed("jump") or !is_on_ceiling():
-		clinging = false # 이 시점 gravity는 0 — 정점에서 내려오는 곡선으로 하강
+	if STATS[state].ability != "cling":
+		clinging = false
 		return
+
+	# 이음새에서 접촉 판정이 잠깐 끊겨도 유예 시간 안에 다시 닿으면 매달림이 유지된다.
+	# 진짜 천장 끝에서는 접촉이 돌아오지 않으므로 유예가 끝나면 떨어진다
+	if is_on_ceiling():
+		clingGraceTimer = CLING_GRACE_TIME
+	else:
+		clingGraceTimer = maxf(clingGraceTimer - delta, 0.0)
+
+		if clingGraceTimer == 0.0:
+			clinging = false # 이 시점 gravity는 0에 가깝다 — 정점에서 내려오는 곡선으로 하강
+			return
 
 	gravity = -CLING_PUSH
 
@@ -225,7 +248,8 @@ func applyCling():
 func applyAnimation():
 
 	if is_on_floor():
-		if abs(walkSpeed) > 60:
+		# 가장 느린 어둠 상태(최고 56px/s)에서도 걷기 애니메이션이 나오도록 여유를 둔 기준
+		if abs(walkSpeed) > 48:
 			sprite.play("walk")
 		else:
 			sprite.play("idle")
