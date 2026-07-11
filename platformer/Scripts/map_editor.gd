@@ -13,7 +13,9 @@ extends Node2D
 #  TAB: 에디터 <-> 플레이 모드 전환 (ESC: 플레이 종료)
 #  F11: 전체화면 <-> 창 모드 전환
 #
-# 맵은 user://maps/<이름>.json 파일로 저장/불러오기 된다.
+# 맵은 maps/<이름>.json 파일로 저장/불러오기 된다.
+# 에디터에서 실행할 때는 프로젝트 안(res://maps)이라 git으로 공유되고,
+# export된 게임에서는 res://가 읽기 전용이므로 user://maps에 저장된다.
 # 플레이 모드로 전환하면 현재 맵이 자동 저장된다 (이름이 비어 있으면 autosave).
 # 에디터를 열면 가장 최근에 저장한 맵이 자동으로 불러와진다.
 
@@ -62,6 +64,9 @@ const TOOL_INFO = {
 	Tool.WATER_LOW: { "name": "물 (수면 낮게)", "water": "low" },
 	Tool.PLATFORM: { "name": "원웨이 플랫폼", "tile": "platform" },
 }
+
+# 맵 저장 폴더 — 에디터 실행 시에는 프로젝트 폴더, export 빌드에서는 사용자 데이터 폴더
+var mapsDir = "res://maps" if OS.has_feature("editor") else "user://maps"
 
 # Public
 
@@ -404,6 +409,9 @@ func syncFullscreenButton():
 
 # 저장 / 불러오기
 
+func mapPath(fileName):
+	return "%s/%s.json" % [mapsDir, fileName]
+
 func saveMap():
 
 	var fileName = fileEdit.text.strip_edges()
@@ -413,7 +421,7 @@ func saveMap():
 		return
 
 	if writeMap(fileName):
-		setStatus("저장됨: " + ProjectSettings.globalize_path("user://maps/%s.json" % fileName))
+		setStatus("저장됨: " + ProjectSettings.globalize_path(mapPath(fileName)))
 
 # 플레이 전환 시 호출. 파일 이름이 비어 있으면 autosave라는 이름으로 저장한다.
 func autoSave():
@@ -452,9 +460,9 @@ func writeMap(fileName):
 		entry[object.type] = object.variant # "fruit" 또는 "water" 필드에 종류 저장
 		data.objects.append(entry)
 
-	DirAccess.make_dir_recursive_absolute("user://maps")
+	DirAccess.make_dir_recursive_absolute(mapsDir)
 
-	var path = "user://maps/%s.json" % fileName
+	var path = mapPath(fileName)
 	var file = FileAccess.open(path, FileAccess.WRITE)
 
 	if file == null:
@@ -469,7 +477,7 @@ func writeMap(fileName):
 func loadMap():
 
 	var fileName = fileEdit.text.strip_edges()
-	var path = "user://maps/%s.json" % fileName
+	var path = mapPath(fileName)
 
 	if !FileAccess.file_exists(path):
 		setStatus("파일이 없습니다: " + ProjectSettings.globalize_path(path))
@@ -521,11 +529,11 @@ func loadMap():
 
 	return true
 
-# user://maps 에서 가장 최근에 수정된 맵 파일 이름 (없으면 "")
+# 맵 폴더에서 가장 최근에 수정된 맵 파일 이름 (없으면 "")
 
 func latestMapName():
 
-	var dir = DirAccess.open("user://maps")
+	var dir = DirAccess.open(mapsDir)
 
 	if dir == null:
 		return ""
@@ -538,7 +546,7 @@ func latestMapName():
 		if fileName.get_extension() != "json":
 			continue
 
-		var time = FileAccess.get_modified_time("user://maps/" + fileName)
+		var time = FileAccess.get_modified_time(mapsDir + "/" + fileName)
 
 		if time > latestTime:
 			latestTime = time
@@ -656,7 +664,7 @@ func buildUI():
 	sizeRow.add_child(applyButton)
 
 	box.add_child(HSeparator.new())
-	box.add_child(makeLabel("파일 이름 (user://maps/)", 13))
+	box.add_child(makeLabel("파일 이름 (%s/)" % mapsDir, 13))
 
 	fileEdit = LineEdit.new()
 	fileEdit.text = "map1"
