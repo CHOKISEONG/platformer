@@ -6,7 +6,7 @@ extends Node2D
 #  [3] 빨간 과일   [4] 파란 과일   [5] 초록 과일
 #  [6] 플레이어 시작 지점
 #  [7] 물 (가득)   [8] 물 (수면 높게)   [9] 물 (수면 낮게)
-#  [0] 원웨이 플랫폼 (아래에서는 통과, 위에서는 착지)
+#  [0] 원웨이 블럭 (칸 위) — 아래에서는 통과, 위에서는 착지
 #  [Q] 용암 (가득)   [W] 용암 (수면 높게)   [E] 용암 (수면 낮게)
 #  [R] 매달림 원웨이 — 칸 아래쪽에 붙는 얇은 발판. 점프로 통과하고, 매달린 채 지나갈 수 있다
 #
@@ -82,7 +82,7 @@ const TOOL_INFO = {
 	Tool.WATER_FULL: { "name": "물 (가득)", "water": "full" },
 	Tool.WATER_HIGH: { "name": "물 (수면 높게)", "water": "high" },
 	Tool.WATER_LOW: { "name": "물 (수면 낮게)", "water": "low" },
-	Tool.PLATFORM: { "name": "원웨이 플랫폼", "tile": "platform" },
+	Tool.PLATFORM: { "name": "원웨이 블럭 (칸 위)", "tile": "platform" },
 	Tool.LAVA_FULL: { "name": "용암 (가득)", "lava": "full" },
 	Tool.LAVA_HIGH: { "name": "용암 (수면 높게)", "lava": "high" },
 	Tool.LAVA_LOW: { "name": "용암 (수면 낮게)", "lava": "low" },
@@ -832,11 +832,12 @@ func buildUI():
 	toolLabel = makeLabel("", 18)
 	box.add_child(toolLabel)
 
-	var help = makeLabel("[1] 바닥  [2] 벽  [0] 플랫폼
+	var help = makeLabel("[1] 바닥  [2] 벽
 [3] 빨강  [4] 파랑  [5] 초록
 [6] 시작 지점
 [7] 물 가득  [8] 물 높게  [9] 물 낮게
 [Q] 용암 가득  [W] 용암 높게  [E] 용암 낮게
+[0] 원웨이 블럭 (칸 위)
 [R] 매달림 원웨이 (칸 아래)
 [방향키] 맵 전체 1칸 이동
 좌클릭 배치 · 우클릭 삭제
