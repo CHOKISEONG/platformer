@@ -1,0 +1,19 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="SpriteFrames" path="res://Sprites/projectile.tres" id="1"]
+[ext_resource type="Script" path="res://Scripts/projectile.gd" id="2"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1"]
+size = Vector2(12, 6)
+
+[node name="Projectile" type="AnimatedSprite2D"]
+sprite_frames = ExtResource("1")
+script = ExtResource("2")
+
+[node name="Area2D" type="Area2D" parent="."]
+collision_mask = 3
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Area2D"]
+shape = SubResource("RectangleShape2D_1")
+
+[connection signal="body_entered" from="Area2D" to="." method="_on_Area2D_body_entered"]

@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://bwbl05a6r27t6"]
+
+[ext_resource type="Script" uid="uid://lnjxrrsqudre" path="res://Scripts/map_editor.gd" id="1"]
+[ext_resource type="TileSet" uid="uid://bjm1pk0dh11mc" path="res://Sprites/tilemap.tres" id="2"]
+
+[node name="Editor" type="Node2D" unique_id=1098997497]
+script = ExtResource("1")
+
+[node name="TileMap" type="TileMapLayer" parent="." unique_id=219132003]
+tile_set = ExtResource("2")
+
+[node name="Objects" type="Node2D" parent="." unique_id=466904188]
+
+[node name="Camera" type="Camera2D" parent="." unique_id=36082030]
+zoom = Vector2(2, 2)

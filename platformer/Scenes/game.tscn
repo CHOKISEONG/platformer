@@ -1,0 +1,254 @@
+[gd_scene load_steps=20 format=3]
+
+[ext_resource type="SpriteFrames" path="res://Sprites/player.tres" id="1"]
+[ext_resource type="Script" path="res://Scripts/player.gd" id="2"]
+[ext_resource type="PackedScene" path="res://Projectile/Projectile.tscn" id="3"]
+[ext_resource type="TileSet" path="res://Sprites/tilemap.tres" id="4"]
+[ext_resource type="SpriteFrames" path="res://Sprites/bee.tres" id="5"]
+[ext_resource type="SpriteFrames" path="res://Sprites/fly.tres" id="6"]
+[ext_resource type="SpriteFrames" path="res://Sprites/grub.tres" id="7"]
+[ext_resource type="Script" path="res://Scripts/bee.gd" id="13"]
+[ext_resource type="PackedScene" path="res://Gem/Gem.tscn" id="8"]
+[ext_resource type="Texture2D" path="res://extra_source/gem_blue.png" id="9"]
+[ext_resource type="Texture2D" path="res://extra_source/gem_green.png" id="10"]
+[ext_resource type="Texture2D" path="res://extra_source/gem_red.png" id="11"]
+[ext_resource type="Texture2D" path="res://extra_source/gem_yellow.png" id="12"]
+[ext_resource type="Script" path="res://Scripts/ui.gd" id="14"]
+
+[sub_resource type="Gradient" id="Gradient_1"]
+colors = PackedColorArray(1, 1, 1, 1, 1, 1, 1, 0)
+
+[sub_resource type="GradientTexture1D" id="GradientTexture1D_1"]
+gradient = SubResource("Gradient_1")
+
+[sub_resource type="ParticleProcessMaterial" id="ParticleProcessMaterial_1"]
+particle_flag_disable_z = true
+emission_shape = 1
+emission_sphere_radius = 4.0
+direction = Vector3(0, 0, 0)
+spread = 180.0
+initial_velocity_min = 10.0
+initial_velocity_max = 10.0
+angle_min = 0.0
+angle_max = 90.0
+gravity = Vector3(0, 0, 0)
+damping_min = 5.0
+damping_max = 5.0
+scale_min = 0.0
+scale_max = 2.0
+color_ramp = SubResource("GradientTexture1D_1")
+
+[sub_resource type="CapsuleShape2D" id="CapsuleShape2D_1"]
+radius = 6.0
+height = 16.0
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_1"]
+size = Vector2(8, 8)
+
+[node name="Game" type="Node2D"]
+
+[node name="TileMap" type="TileMapLayer" parent="."]
+tile_map_data = PackedByteArray("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")
+tile_set = ExtResource("4")
+
+[node name="Player" type="CharacterBody2D" parent="." groups=["npc", "player"]]
+script = ExtResource("2")
+projectile = ExtResource("3")
+metadata/_edit_group_ = true
+
+[node name="Dust" type="GPUParticles2D" parent="Player"]
+position = Vector2(0, 10)
+amount = 16
+process_material = SubResource("ParticleProcessMaterial_1")
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Player"]
+position = Vector2(0, 8)
+sprite_frames = ExtResource("1")
+animation = &"idle"
+offset = Vector2(0, -8)
+
+[node name="Collision" type="CollisionShape2D" parent="Player"]
+shape = SubResource("CapsuleShape2D_1")
+
+[node name="Camera" type="Camera2D" parent="Player"]
+zoom = Vector2(4, 4)
+limit_left = -240
+limit_top = -200
+limit_right = 620
+limit_bottom = 120
+limit_smoothed = true
+position_smoothing_enabled = true
+
+[node name="Level" type="Node2D" parent="."]
+
+[node name="Bee" type="CharacterBody2D" parent="Level"]
+position = Vector2(40, 8)
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("13")
+movementSpeed = 30
+metadata/_edit_group_ = true
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Bee"]
+position = Vector2(0, -4)
+sprite_frames = ExtResource("5")
+autoplay = "default"
+frame = 1
+flip_h = true
+
+[node name="Shape" type="CollisionShape2D" parent="Level/Bee"]
+position = Vector2(0, -2)
+shape = SubResource("RectangleShape2D_1")
+
+[node name="Bee2" type="CharacterBody2D" parent="Level"]
+position = Vector2(216, -48)
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("13")
+movementSpeed = 30
+metadata/_edit_group_ = true
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Bee2"]
+position = Vector2(0, -4)
+sprite_frames = ExtResource("5")
+autoplay = "default"
+frame = 1
+flip_h = true
+
+[node name="Shape" type="CollisionShape2D" parent="Level/Bee2"]
+position = Vector2(0, -2)
+shape = SubResource("RectangleShape2D_1")
+
+[node name="Fly" type="CharacterBody2D" parent="Level"]
+position = Vector2(16, -24)
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("13")
+movementSpeed = 30
+orientation = 1
+metadata/_edit_group_ = true
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Fly"]
+position = Vector2(0, -4)
+sprite_frames = ExtResource("6")
+autoplay = "default"
+flip_h = true
+
+[node name="Shape" type="CollisionShape2D" parent="Level/Fly"]
+position = Vector2(0, -2)
+shape = SubResource("RectangleShape2D_1")
+
+[node name="Fly2" type="CharacterBody2D" parent="Level"]
+position = Vector2(440, -104)
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("13")
+movementSpeed = 30
+orientation = 1
+metadata/_edit_group_ = true
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Fly2"]
+position = Vector2(0, -4)
+sprite_frames = ExtResource("6")
+autoplay = "default"
+flip_h = true
+
+[node name="Shape" type="CollisionShape2D" parent="Level/Fly2"]
+position = Vector2(0, -2)
+shape = SubResource("RectangleShape2D_1")
+
+[node name="Grub" type="CharacterBody2D" parent="Level"]
+position = Vector2(200, 12)
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("13")
+movementSpeed = 30
+orientation = 1
+metadata/_edit_group_ = true
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Grub"]
+sprite_frames = ExtResource("7")
+autoplay = "default"
+offset = Vector2(0, -4)
+flip_h = true
+
+[node name="Shape" type="CollisionShape2D" parent="Level/Grub"]
+position = Vector2(0, -2)
+shape = SubResource("RectangleShape2D_1")
+
+[node name="Grub2" type="CharacterBody2D" parent="Level"]
+position = Vector2(368, -4)
+collision_layer = 2
+collision_mask = 2
+script = ExtResource("13")
+movementSpeed = 30
+orientation = 1
+metadata/_edit_group_ = true
+
+[node name="Sprite" type="AnimatedSprite2D" parent="Level/Grub2"]
+sprite_frames = ExtResource("7")
+autoplay = "default"
+frame = 1
+offset = Vector2(0, -4)
+flip_h = true
+
+[node name="Shape" type="CollisionShape2D" parent="Level/Grub2"]
+position = Vector2(0, -2)
+shape = SubResource("RectangleShape2D_1")
+
+[node name="Gems" type="Node2D" parent="."]
+
+[node name="Gem" parent="Gems" instance=ExtResource("8")]
+position = Vector2(8, 40)
+gemTexture = ExtResource("9")
+
+[node name="Gem2" parent="Gems" instance=ExtResource("8")]
+position = Vector2(-104, 8)
+gemTexture = ExtResource("10")
+
+[node name="Gem3" parent="Gems" instance=ExtResource("8")]
+position = Vector2(-200, -8)
+gemTexture = ExtResource("11")
+
+[node name="Gem4" parent="Gems" instance=ExtResource("8")]
+position = Vector2(-24, -56)
+gemTexture = ExtResource("12")
+
+[node name="Gem5" parent="Gems" instance=ExtResource("8")]
+position = Vector2(104, -40)
+gemTexture = ExtResource("10")
+
+[node name="Gem6" parent="Gems" instance=ExtResource("8")]
+position = Vector2(216, -104)
+gemTexture = ExtResource("9")
+
+[node name="Gem7" parent="Gems" instance=ExtResource("8")]
+position = Vector2(360, -8)
+gemTexture = ExtResource("11")
+
+[node name="Gem8" parent="Gems" instance=ExtResource("8")]
+position = Vector2(472, -88)
+gemTexture = ExtResource("12")
+
+[node name="UI" type="CanvasLayer" parent="." groups=["ui"]]
+script = ExtResource("14")
+
+[node name="Counter" type="HBoxContainer" parent="UI"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 200.0
+offset_bottom = 52.0
+
+[node name="Icon" type="TextureRect" parent="UI/Counter"]
+custom_minimum_size = Vector2(32, 32)
+layout_mode = 2
+texture_filter = 1
+texture = ExtResource("9")
+expand_mode = 1
+stretch_mode = 5
+
+[node name="Count" type="Label" parent="UI/Counter"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.34, 0.2, 0.14, 1)
+theme_override_font_sizes/font_size = 26
+text = "0"
