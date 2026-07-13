@@ -55,6 +55,8 @@ Godot 4.7 (Forward Plus, D3D12) 기반 2D 퍼즐 플랫포머. 어둠 속 실루
 
 매달림 원웨이 플랫폼(`cling_platform.gd`, `platform/ClingPlatform.tscn`)은 칸 아래쪽 4px에 붙는 원웨이 발판 — 아래에서 점프하면 통과하지만, 플레이어가 천장에 매달린(`clinging`) 동안만 양방향 충돌로 바뀌어 매달린 채 좌우로 지나갈 수 있다. 용암처럼 매 프레임 플레이어 상태를 확인하며, 원웨이 특성상 이 발판에서 매달리기를 새로 시작할 수는 없다.
 
+초록 인간(`green_human.gd`, `npc/GreenHuman.tscn`)은 충돌체 없는 Area2D NPC — 플레이어 스프라이트에 실루엣 셰이더를 어두운 초록으로 입히고 표정(`green_human_face.gd`)만 따로 그린다. 초록 플레이어가 닿으면 잠깐 껴안았다가 3블럭 높이(LAUNCH_POWER 26 = RED 점프)로 띄워 주고, 다른 색 플레이어가 밟으면 화난 표정으로 1블럭(BOUNCE_POWER 17 = BLUE 점프) 튕겨 낸다. 플레이어 쪽 훅은 `hold(duration)`(조작·물리 정지)과 `launch(power)`(jumpPower 단위로 발사) — 둘 다 덕 타이핑으로 부른다.
+
 ### 맵 에디터 (Scripts/map_editor.gd)
 
 UI 전부를 코드로 생성하는 단일 스크립트. 알아야 할 것:

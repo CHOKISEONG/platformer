@@ -82,6 +82,7 @@ var clinging = false
 var coyoteTimer = 0.0 # 남은 코요테 타임 — 바닥 위에서는 항상 가득 채워진다
 var jumpBufferTimer = 0.0 # 남은 점프 버퍼 — 점프 키를 누른 순간 가득 채워진다
 var clingGraceTimer = 0.0 # 남은 매달림 유예 — 천장에 닿아 있는 동안은 항상 가득 채워진다
+var heldTimer = 0.0 # 남은 붙잡힘 시간 — 초록 인간 등이 hold()로 채운다. 남아 있는 동안 조작·물리 정지
 
 var initialPosition
 
@@ -100,6 +101,13 @@ func _ready():
 	setState(ColorState.DARK)
 
 func _physics_process(delta):
+
+	# 붙잡힌 동안(초록 인간의 포옹 등)은 조작·중력·이동을 모두 멈추고 제자리에 머문다.
+	# 실제 해제는 대부분 launch()가 하고, 이 타이머는 붙잡은 쪽이 사라졌을 때의 안전장치다
+	if heldTimer > 0.0:
+		heldTimer = maxf(heldTimer - delta, 0.0)
+		sprite.play("idle")
+		return
 
 	# is_on_floor()는 지난 프레임 move_and_slide 결과 — 점프 판정 전에 갱신한다
 	if is_on_floor():
@@ -158,6 +166,7 @@ func die():
 	coyoteTimer = 0.0
 	jumpBufferTimer = 0.0
 	clingGraceTimer = 0.0
+	heldTimer = 0.0 # 안겨 있던 도중 죽었다면 붙잡힘도 풀린다 (초록 인간은 heldTimer로 이를 감지한다)
 
 	reset_physics_interpolation() # 순간이동이 잔상처럼 보간되지 않도록
 
@@ -185,8 +194,10 @@ func applyControls():
 		jumpBufferTimer = JUMP_BUFFER_TIME
 
 	# 바닥 위(코요테 타임 가득)이거나 모서리에서 떨어진 직후,
-	# 버퍼에 점프 입력이 남아 있으면 점프 — 착지 직전에 누른 입력도 여기서 소화된다
-	if jumpBufferTimer > 0.0 and jumpPower > 0 and coyoteTimer > 0.0:
+	# 버퍼에 점프 입력이 남아 있으면 점프 — 착지 직전에 누른 입력도 여기서 소화된다.
+	# gravity >= 0 조건: launch()로 쏘아 올려진 직후에는 is_on_floor()가 한 프레임 옛 값(바닥)이라
+	# 코요테 타임이 차 있을 수 있다 — 이때 점프가 발동하면 발사 속도를 더 약한 점프로 덮어쓴다
+	if jumpBufferTimer > 0.0 and jumpPower > 0 and coyoteTimer > 0.0 and gravity >= 0:
 		jump()
 
 # Apply gravity and jumping
@@ -214,6 +225,28 @@ func jump():
 	gravity = -jumpPower * 8 # 배수 8은 gravityPower(6.4)와 짝 — 그쪽 주석 참고
 	coyoteTimer = 0.0 # 남은 시간으로 공중에서 한 번 더 점프하지 못하게
 	jumpBufferTimer = 0.0 # 버퍼에 남은 입력으로 연속 점프하지 못하게
+
+# 외부 오브젝트(초록 인간 등)가 덕 타이핑으로 부르는 훅 두 개.
+# hold: duration 동안 제자리에 붙잡아 둔다 (_physics_process 상단의 정지 처리 참고).
+# 붙잡은 쪽이 launch()로 풀어 주는 게 정상 경로라 duration은 여유 있게 주면 된다
+
+func hold(duration):
+
+	heldTimer = duration
+	walkSpeed = 0.0
+	gravity = 0
+	clinging = false # 천장에 매달린 채 붙잡히면 매달림이 풀린다
+
+# launch: jumpPower와 같은 단위의 세기로 위로 쏘아 올린다 — jump()와 같은 초속 공식.
+# 상태의 jumpPower와 무관하므로 점프가 없는 어둠 상태도 튕겨 낼 수 있다
+
+func launch(power):
+
+	heldTimer = 0.0
+	clinging = false
+	gravity = -power * 8 # 배수 8은 gravityPower(6.4)와 짝 — gravityPower 주석 참고
+	coyoteTimer = 0.0 # jump()와 같은 이유 — 남은 시간으로 공중 점프하지 못하게
+	jumpBufferTimer = 0.0
 
 # 초록 상태 천장 밀착: 상승 중 천장에 닿으면 매달린다 (applyGravity에서 시작).
 # 매달린 동안에도 좌우 이동은 그대로 가능해 천장을 타고 움직일 수 있다.

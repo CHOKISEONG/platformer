@@ -9,6 +9,7 @@ extends Node2D
 #  [0] 원웨이 블럭 (칸 위) — 아래에서는 통과, 위에서는 착지
 #  [Q] 용암 (가득)   [W] 용암 (수면 높게)   [E] 용암 (수면 낮게)
 #  [R] 매달림 원웨이 — 칸 아래쪽에 붙는 얇은 발판. 점프로 통과하고, 매달린 채 지나갈 수 있다
+#  [T] 초록 인간 — 초록 플레이어가 닿으면 껴안았다 3블럭 위로 띄워 주고, 다른 색이 밟으면 1블럭 튕겨 낸다
 #
 #  좌클릭: 배치 / 우클릭: 삭제 (오브젝트가 있으면 오브젝트 먼저)
 #  휠: 확대·축소 / 휠 버튼 드래그: 화면 이동
@@ -29,6 +30,7 @@ const FRUIT_SCENE = preload("res://Fruit/Fruit.tscn")
 const WATER_SCENE = preload("res://water/Water.tscn")
 const LAVA_SCENE = preload("res://lava/Lava.tscn")
 const CLING_PLATFORM_SCENE = preload("res://platform/ClingPlatform.tscn")
+const GREEN_HUMAN_SCENE = preload("res://npc/GreenHuman.tscn")
 const PLAYER_SCENE = preload("res://Player/ColorPlayer.tscn")
 
 const CELL = 16
@@ -70,7 +72,7 @@ const LAVA_LEVELS = {
 }
 
 enum Mode { EDIT, PLAY }
-enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, PLATFORM, LAVA_FULL, LAVA_HIGH, LAVA_LOW, CLING_PLATFORM }
+enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, PLATFORM, LAVA_FULL, LAVA_HIGH, LAVA_LOW, CLING_PLATFORM, GREEN_HUMAN }
 
 const TOOL_INFO = {
 	Tool.FLOOR: { "name": "바닥 타일", "tile": "floor" },
@@ -87,6 +89,7 @@ const TOOL_INFO = {
 	Tool.LAVA_HIGH: { "name": "용암 (수면 높게)", "lava": "high" },
 	Tool.LAVA_LOW: { "name": "용암 (수면 낮게)", "lava": "low" },
 	Tool.CLING_PLATFORM: { "name": "매달림 원웨이 (칸 아래)", "clingPlatform": "bottom" },
+	Tool.GREEN_HUMAN: { "name": "초록 인간", "greenHuman": "default" },
 }
 
 # 맵 저장 폴더 — 에디터 실행 시에는 프로젝트 폴더, export 빌드에서는 사용자 데이터 폴더
@@ -337,6 +340,7 @@ func handleKey(event):
 		KEY_W: selectTool(Tool.LAVA_HIGH)
 		KEY_E: selectTool(Tool.LAVA_LOW)
 		KEY_R: selectTool(Tool.CLING_PLATFORM)
+		KEY_T: selectTool(Tool.GREEN_HUMAN)
 		KEY_LEFT: shiftMap(Vector2i.LEFT)
 		KEY_RIGHT: shiftMap(Vector2i.RIGHT)
 		KEY_UP: shiftMap(Vector2i.UP)
@@ -377,6 +381,8 @@ func paint(cell, erase):
 		placeObject(cell, "lava", info.lava)
 	elif info.has("clingPlatform"):
 		placeObject(cell, "clingPlatform", info.clingPlatform)
+	elif info.has("greenHuman"):
+		placeObject(cell, "greenHuman", info.greenHuman)
 	elif currentTool == Tool.PLAYER_START:
 		playerStartCell = cell
 
@@ -407,6 +413,8 @@ func spawnObject(cell, type, variant):
 			node.lavaLevel = LAVA_LEVELS[variant]
 		"clingPlatform":
 			node = CLING_PLATFORM_SCENE.instantiate() # 변형은 아직 bottom 하나뿐
+		"greenHuman":
+			node = GREEN_HUMAN_SCENE.instantiate() # 변형은 아직 default 하나뿐
 
 	node.position = cellCenter(cell)
 	objectsRoot.add_child(node)
@@ -637,6 +645,8 @@ func loadMap():
 			placeObject(cell, "lava", object.lava)
 		elif type == "clingPlatform":
 			placeObject(cell, "clingPlatform", "bottom") # 변형은 아직 bottom 하나뿐
+		elif type == "greenHuman":
+			placeObject(cell, "greenHuman", "default") # 변형은 아직 default 하나뿐
 
 	var start = data.get("playerStart", {})
 	playerStartCell = Vector2i(int(start.get("x", 2)), int(start.get("y", mapHeight - 4)))
@@ -839,6 +849,7 @@ func buildUI():
 [Q] 용암 가득  [W] 용암 높게  [E] 용암 낮게
 [0] 원웨이 블럭 (칸 위)
 [R] 매달림 원웨이 (칸 아래)
+[T] 초록 인간
 [방향키] 맵 전체 1칸 이동
 좌클릭 배치 · 우클릭 삭제
 휠 줌 · 휠 드래그 이동", 15)
