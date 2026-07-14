@@ -40,6 +40,7 @@ const PLAYER_SCENE = preload("res://Player/ColorPlayer.tscn")
 const FRUIT_SCRIPT = preload("res://Scripts/fruit.gd") # class_name이 없어 스크립트로 텍스처 테이블(TEXTURES)을 참조
 const TILESET_TEXTURE = preload("res://Sprites/tilemap.png")
 const PLAYER_FRAMES = preload("res://Sprites/player.tres")
+const ROOM_CAMERA_SCRIPT = preload("res://Scripts/room_camera.gd") # class_name이 없어 스크립트로 룸 크기 상수(ROOM_SIZE)를 참조
 
 const CELL = 16
 const TILE_SOURCE = 0
@@ -851,6 +852,16 @@ func drawOverlay(c):
 		c.draw_line(Vector2(x * CELL, 0), Vector2(x * CELL, mapSize.y), lineColor)
 	for y in range(mapHeight + 1):
 		c.draw_line(Vector2(0, y * CELL), Vector2(mapSize.x, y * CELL), lineColor)
+
+	# 룸 격자 — 룸 카메라가 화면을 나누는 단위(20x15칸 = 320x240px).
+	# 룸 원점은 셀 (0,0) 기준이라 이 격자에 맞춰 만들면 플레이 화면과 정확히 일치한다
+	var roomSize = ROOM_CAMERA_SCRIPT.ROOM_SIZE
+	var roomColor = Color(0.4, 0.7, 1.0, 0.35)
+
+	for x in range(0, mapWidth * CELL + 1, int(roomSize.x)):
+		c.draw_line(Vector2(x, 0), Vector2(x, mapSize.y), roomColor)
+	for y in range(0, mapHeight * CELL + 1, int(roomSize.y)):
+		c.draw_line(Vector2(0, y), Vector2(mapSize.x, y), roomColor)
 
 	# 맵 경계
 	c.draw_rect(Rect2(Vector2.ZERO, mapSize), Color(1, 1, 1, 0.4), false)

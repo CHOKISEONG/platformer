@@ -1,9 +1,10 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="Script" path="res://Scripts/player_color.gd" id="1"]
 [ext_resource type="SpriteFrames" path="res://Sprites/player.tres" id="2"]
 [ext_resource type="Shader" path="res://Shaders/silhouette.gdshader" id="3"]
 [ext_resource type="Script" path="res://Scripts/eyes.gd" id="4"]
+[ext_resource type="Script" path="res://Scripts/room_camera.gd" id="5"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_1"]
 resource_local_to_scene = true
@@ -39,3 +40,4 @@ shape = SubResource("CapsuleShape2D_1")
 process_callback = 0
 zoom = Vector2(4, 4)
 position_smoothing_enabled = true
+script = ExtResource("5")
