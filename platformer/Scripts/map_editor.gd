@@ -11,10 +11,13 @@ extends Node2D
 #      아래에서 점프하면 통과하고 위에서는 밟고 선다. 천장에 매달린 플레이어는 걸리지 않고
 #      지나가며, 머리 높이로 지날 때는 발판 밑면이 천장이 되어 매달린 채 건너갈 수 있다
 #  [T] 초록 인간 — 초록 플레이어가 닿으면 껴안았다 3블럭 위로 띄워 주고, 다른 색이 밟으면 1블럭 튕겨 낸다
+#  [S] 선택 / 이동 — 드래그로 영역을 잡고, 잡힌 영역 안을 다시 드래그하면 그 부분의
+#      타일/오브젝트/시작 지점이 통째로 옮겨진다 (끄는 동안 반투명 고스트, 놓을 때 확정).
+#      선택 중에는 방향키가 선택 영역만 1칸씩 옮긴다. 우클릭/ESC: 선택 해제
 #
 #  좌클릭: 배치 / 우클릭: 삭제 (오브젝트가 있으면 오브젝트 먼저)
 #  휠: 확대·축소 / 휠 버튼 드래그: 화면 이동
-#  방향키: 맵 전체를 1칸씩 이동 (경계 밖으로 나간 타일/오브젝트는 잘린다)
+#  방향키: 맵 전체를 1칸씩 이동 (경계 밖으로 나간 타일/오브젝트는 잘린다) — 선택 영역이 있으면 그 영역만
 #  좌측 패널 팔레트(5x3 격자): 아이콘을 클릭해 도구 선택 — 위 단축키와 병행.
 #  타일셋(tilemap.png)의 모든 타일이 도구로 자동 등록되고,
 #  지형(충돌 타일) -> 장식(통과 타일) -> 오브젝트 묶음 순으로 정렬된다. ◀ ▶로 페이지 넘기기
@@ -82,7 +85,7 @@ const LAVA_LEVELS = {
 }
 
 enum Mode { EDIT, PLAY }
-enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, LAVA_FULL, LAVA_HIGH, LAVA_LOW, ONE_WAY_PLATFORM, GREEN_HUMAN }
+enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, LAVA_FULL, LAVA_HIGH, LAVA_LOW, ONE_WAY_PLATFORM, GREEN_HUMAN, SELECT }
 
 const TOOL_INFO = {
 	Tool.FLOOR: { "name": "바닥 타일", "tile": "floor" },
@@ -99,6 +102,7 @@ const TOOL_INFO = {
 	Tool.LAVA_LOW: { "name": "용암 (수면 낮게)", "lava": "low" },
 	Tool.ONE_WAY_PLATFORM: { "name": "원웨이 발판 (칸 위 경계)", "oneWayPlatform": "top" },
 	Tool.GREEN_HUMAN: { "name": "초록 인간", "greenHuman": "default" },
+	Tool.SELECT: { "name": "선택 / 이동" },
 }
 
 # 도구 팔레트 — 5 x 3 격자. 도구가 격자보다 많아지면 ◀ ▶로 줄 단위 스크롤
@@ -137,6 +141,16 @@ var player = null
 var zoomLevel = 2.0
 var hoverCell = Vector2i(-1, -1)
 var overlay
+
+# 선택 / 이동 도구 상태 (Tool.SELECT)
+var selectionRect = Rect2i() # 잡힌 셀 영역 — 넓이가 0이면 선택 없음
+var selectionAnchor = Vector2i.ZERO # 영역 드래그의 시작 셀
+var selectionDragging = false # 좌클릭 드래그로 영역을 잡는 중
+var selectionMoving = false # 잡힌 영역을 끌어서 옮기는 중
+var moveStartCell = Vector2i.ZERO # 이동 드래그를 시작한 셀
+var moveDelta = Vector2i.ZERO # 이동 드래그의 현재 칸 수
+var moveTiles = {} # 이동할 타일 — 셀 -> 아틀라스 좌표 (collectSelection에서 채움)
+var moveObjects = {} # 이동할 오브젝트 — 셀 -> objects 항목 참조
 
 # 프로젝트 설정의 게임 해상도 — 플레이 모드에서 복원할 값 (_ready에서 기억)
 var gameResolution
@@ -253,7 +267,7 @@ func buildTileTools():
 		Tool.FRUIT_RED, Tool.FRUIT_BLUE, Tool.FRUIT_GREEN,
 		Tool.WATER_FULL, Tool.WATER_HIGH, Tool.WATER_LOW,
 		Tool.LAVA_FULL, Tool.LAVA_HIGH, Tool.LAVA_LOW,
-		Tool.ONE_WAY_PLATFORM, Tool.GREEN_HUMAN, Tool.PLAYER_START,
+		Tool.ONE_WAY_PLATFORM, Tool.GREEN_HUMAN, Tool.PLAYER_START, Tool.SELECT,
 	]
 
 	for toolId in Tool.values():
@@ -301,6 +315,7 @@ func newMap(width, height):
 	mapWidth = clampi(width, MIN_SIZE, MAX_SIZE)
 	mapHeight = clampi(height, MIN_SIZE, MAX_SIZE)
 
+	clearSelection()
 	tileMap.clear()
 	clearObjects()
 
@@ -319,6 +334,8 @@ func resizeMap(width, height):
 
 	mapWidth = clampi(width, MIN_SIZE, MAX_SIZE)
 	mapHeight = clampi(height, MIN_SIZE, MAX_SIZE)
+
+	clearSelection() # 선택 영역이 새 경계 밖에 남지 않도록
 
 	# 새 크기 밖으로 벗어난 타일과 오브젝트는 제거
 	for cell in tileMap.get_used_cells():
@@ -407,18 +424,31 @@ func _unhandled_input(event):
 	if mode != Mode.EDIT:
 		return
 
-	if event is InputEventMouseButton and event.pressed:
+	if event is InputEventMouseButton:
 
-		# 캔버스를 클릭하면 UI 포커스를 해제 (TAB 전환이 막히지 않도록)
-		var focus = get_viewport().gui_get_focus_owner()
-		if focus:
-			focus.release_focus()
+		if event.pressed:
 
-		match event.button_index:
-			MOUSE_BUTTON_LEFT: paint(mouseCell(), false)
-			MOUSE_BUTTON_RIGHT: paint(mouseCell(), true)
-			MOUSE_BUTTON_WHEEL_UP: applyZoom(1.25)
-			MOUSE_BUTTON_WHEEL_DOWN: applyZoom(0.8)
+			# 캔버스를 클릭하면 UI 포커스를 해제 (TAB 전환이 막히지 않도록)
+			var focus = get_viewport().gui_get_focus_owner()
+			if focus:
+				focus.release_focus()
+
+			match event.button_index:
+				MOUSE_BUTTON_LEFT:
+					if currentTool == Tool.SELECT:
+						beginSelectionDrag()
+					else:
+						paint(mouseCell(), false)
+				MOUSE_BUTTON_RIGHT:
+					if currentTool == Tool.SELECT:
+						clearSelection()
+					else:
+						paint(mouseCell(), true)
+				MOUSE_BUTTON_WHEEL_UP: applyZoom(1.25)
+				MOUSE_BUTTON_WHEEL_DOWN: applyZoom(0.8)
+
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			endSelectionDrag() # 선택 드래그 중이 아니면 아무것도 하지 않는다
 
 	if event is InputEventMouseMotion:
 
@@ -427,9 +457,13 @@ func _unhandled_input(event):
 		if event.button_mask & MOUSE_BUTTON_MASK_MIDDLE:
 			camera.position -= event.relative / zoomLevel
 		elif event.button_mask & MOUSE_BUTTON_MASK_LEFT:
-			paint(hoverCell, false)
+			if currentTool == Tool.SELECT:
+				updateSelectionDrag()
+			else:
+				paint(hoverCell, false)
 		elif event.button_mask & MOUSE_BUTTON_MASK_RIGHT:
-			paint(hoverCell, true)
+			if currentTool != Tool.SELECT:
+				paint(hoverCell, true)
 
 		overlay.queue_redraw()
 
@@ -439,8 +473,12 @@ func handleKey(event):
 		toggleMode()
 		return
 
-	if event.physical_keycode == KEY_ESCAPE and mode == Mode.PLAY:
-		stopPlay()
+	if event.physical_keycode == KEY_ESCAPE:
+		if mode == Mode.PLAY:
+			stopPlay()
+		elif hasSelection() or selectionDragging:
+			clearSelection()
+			setStatus("선택 해제")
 		return
 
 	if event.physical_keycode == KEY_F11:
@@ -465,10 +503,11 @@ func handleKey(event):
 		KEY_E: selectTool(Tool.LAVA_LOW)
 		KEY_R: selectTool(Tool.ONE_WAY_PLATFORM)
 		KEY_T: selectTool(Tool.GREEN_HUMAN)
-		KEY_LEFT: shiftMap(Vector2i.LEFT)
-		KEY_RIGHT: shiftMap(Vector2i.RIGHT)
-		KEY_UP: shiftMap(Vector2i.UP)
-		KEY_DOWN: shiftMap(Vector2i.DOWN)
+		KEY_S: selectTool(Tool.SELECT)
+		KEY_LEFT: moveSelectionOrMap(Vector2i.LEFT)
+		KEY_RIGHT: moveSelectionOrMap(Vector2i.RIGHT)
+		KEY_UP: moveSelectionOrMap(Vector2i.UP)
+		KEY_DOWN: moveSelectionOrMap(Vector2i.DOWN)
 
 func mouseCell():
 	return tileMap.local_to_map(tileMap.get_local_mouse_position())
@@ -477,6 +516,11 @@ func selectTool(newTool):
 
 	currentTool = newTool
 	toolLabel.text = "도구: " + toolInfo[newTool].name
+
+	if newTool == Tool.SELECT:
+		setStatus("드래그: 영역 선택 · 영역 안 드래그: 이동 · 방향키: 1칸 이동 · 우클릭/ESC: 해제")
+	else:
+		clearSelection() # 다른 도구로 바꾸면 선택도 푼다
 
 	# 단축키로 선택해도 팔레트가 따라가도록 — 선택 도구가 격자 밖이면 보이는 줄로 스크롤
 	@warning_ignore("integer_division")
@@ -577,6 +621,177 @@ func rebuildObjects():
 
 		data.node = spawnObject(cell, data.type, data.variant)
 
+# 선택 / 이동 (Tool.SELECT)
+#
+# 드래그로 셀 영역을 잡고(selectionRect), 잡힌 영역 안을 다시 드래그하면
+# 그 영역의 타일/오브젝트/시작 지점이 통째로 옮겨진다.
+# 이동은 마우스를 놓을 때 확정되고, 끄는 동안에는 오버레이가 반투명 고스트로 미리 보여 준다.
+
+func hasSelection():
+	return selectionRect.has_area()
+
+func clampToMap(cell):
+	return cell.clamp(Vector2i.ZERO, Vector2i(mapWidth - 1, mapHeight - 1))
+
+# 두 셀을 대각 꼭짓점으로 하는 사각형 — 셀 단위 포함 범위라 크기에 +1
+func cellRect(a, b):
+
+	var topLeft = Vector2i(mini(a.x, b.x), mini(a.y, b.y))
+	var bottomRight = Vector2i(maxi(a.x, b.x), maxi(a.y, b.y))
+
+	return Rect2i(topLeft, bottomRight - topLeft + Vector2i.ONE)
+
+func beginSelectionDrag():
+
+	var cell = mouseCell()
+
+	# 이미 잡힌 영역 안에서 시작하면 선택 이동, 밖이면 새 영역 선택
+	if hasSelection() and selectionRect.has_point(cell):
+		selectionMoving = true
+		moveStartCell = cell
+		moveDelta = Vector2i.ZERO
+		collectSelection()
+	else:
+		selectionDragging = true
+		selectionAnchor = clampToMap(cell)
+		selectionRect = cellRect(selectionAnchor, selectionAnchor)
+
+	overlay.queue_redraw()
+
+func updateSelectionDrag():
+
+	if selectionDragging:
+		selectionRect = cellRect(selectionAnchor, clampToMap(mouseCell()))
+	elif selectionMoving:
+		moveDelta = mouseCell() - moveStartCell
+
+func endSelectionDrag():
+
+	if selectionDragging:
+
+		selectionDragging = false
+
+		var tileCount = 0
+		for cell in tileMap.get_used_cells():
+			if selectionRect.has_point(cell):
+				tileCount += 1
+
+		var objectCount = 0
+		for cell in objects:
+			if selectionRect.has_point(cell):
+				objectCount += 1
+
+		setStatus("선택: %d x %d — 타일 %d, 오브젝트 %d (영역을 끌거나 방향키로 이동 · 우클릭/ESC 해제)" % [selectionRect.size.x, selectionRect.size.y, tileCount, objectCount])
+		overlay.queue_redraw()
+
+	elif selectionMoving:
+
+		selectionMoving = false
+		commitSelectionMove(moveDelta)
+
+		moveTiles = {}
+		moveObjects = {}
+		moveDelta = Vector2i.ZERO
+
+# 방향키 — 선택이 있으면 선택 영역만, 없으면 맵 전체를 옮긴다
+func moveSelectionOrMap(offset):
+
+	if selectionDragging or selectionMoving:
+		return
+
+	if hasSelection():
+		collectSelection()
+		commitSelectionMove(offset)
+		moveTiles = {}
+		moveObjects = {}
+	else:
+		shiftMap(offset)
+
+# 선택 영역 안의 타일/오브젝트를 모아 둔다 — 이동 미리보기(drawOverlay)와 확정이 함께 쓴다
+func collectSelection():
+
+	moveTiles = {}
+	moveObjects = {}
+
+	for cell in tileMap.get_used_cells():
+		if selectionRect.has_point(cell):
+			moveTiles[cell] = tileMap.get_cell_atlas_coords(cell)
+
+	for cell in objects:
+		if selectionRect.has_point(cell):
+			moveObjects[cell] = objects[cell]
+
+# 모아 둔 선택 내용을 offset만큼 옮겨 확정한다.
+# 목적지에 있던 기존 타일/오브젝트는 덮어쓰고, 경계 밖은 shiftMap처럼 잘린다.
+func commitSelectionMove(offset):
+
+	if offset == Vector2i.ZERO:
+		return
+
+	var clipped = 0
+
+	for cell in moveTiles:
+		tileMap.erase_cell(cell)
+
+	for cell in moveTiles:
+
+		var target = cell + offset
+
+		if isInside(target):
+			tileMap.set_cell(target, TILE_SOURCE, moveTiles[cell])
+		else:
+			clipped += 1
+
+	for cell in moveObjects:
+		objects.erase(cell) # 데이터/노드는 moveObjects가 들고 있다
+
+	for cell in moveObjects:
+
+		var data = moveObjects[cell]
+		var target = cell + offset
+
+		if !isInside(target):
+			clipped += 1
+			if is_instance_valid(data.node):
+				data.node.queue_free()
+			continue
+
+		if objects.has(target): # 선택 밖에 있던 오브젝트 위로 옮기면 덮어쓴다
+			removeObject(target)
+
+		objects[target] = data
+
+		if is_instance_valid(data.node):
+			data.node.position = cellCenter(target)
+			data.node.reset_physics_interpolation() # 순간이동이 잔상처럼 보간되지 않도록
+
+	if selectionRect.has_point(playerStartCell):
+		playerStartCell = clampToMap(playerStartCell + offset)
+
+	# 선택 영역도 내용과 함께 따라간다 — 맵 밖으로 나간 부분은 잘라 내고, 전부 밖이면 선택이 풀린다
+	selectionRect.position += offset
+	selectionRect = selectionRect.intersection(Rect2i(0, 0, mapWidth, mapHeight))
+
+	refresh()
+
+	var message = "선택 이동: (%d, %d)" % [offset.x, offset.y]
+
+	if clipped > 0:
+		message += " — 경계 밖으로 잘림: %d" % clipped
+
+	setStatus(message)
+
+func clearSelection():
+
+	selectionRect = Rect2i()
+	selectionDragging = false
+	selectionMoving = false
+	moveTiles = {}
+	moveObjects = {}
+	moveDelta = Vector2i.ZERO
+
+	overlay.queue_redraw()
+
 # 에디터 <-> 플레이 모드
 
 func toggleMode():
@@ -589,6 +804,9 @@ func toggleMode():
 func startPlay():
 
 	mode = Mode.PLAY
+
+	# 플레이 중에는 마우스 release가 에디터에 전달되지 않아 드래그 상태가 고착될 수 있다
+	clearSelection()
 
 	# 실제 게임과 같은 시야로 테스트하도록 게임 해상도로 되돌린다
 	get_window().content_scale_size = gameResolution
@@ -745,6 +963,7 @@ func loadMap():
 		setStatus("JSON을 읽을 수 없습니다")
 		return false
 
+	clearSelection()
 	tileMap.clear()
 	clearObjects()
 
@@ -865,6 +1084,33 @@ func drawOverlay(c):
 	if isInside(hoverCell):
 		c.draw_rect(Rect2(Vector2(hoverCell) * CELL, Vector2(CELL, CELL)), Color(1, 1, 1, 0.08))
 		c.draw_rect(Rect2(Vector2(hoverCell) * CELL, Vector2(CELL, CELL)), Color(1, 1, 1, 0.25), false)
+
+	# 선택 영역 (드래그로 잡는 중이거나 확정된 영역)
+	if selectionDragging or hasSelection():
+		var selection = Rect2(Vector2(selectionRect.position * CELL), Vector2(selectionRect.size * CELL))
+		c.draw_rect(selection, Color(0.5, 0.8, 1, 0.1))
+		c.draw_rect(selection, Color(0.5, 0.8, 1, 0.9), false)
+
+	# 선택 이동 미리보기 — 반투명 고스트가 마우스를 따라오고, 놓으면 확정된다 (commitSelectionMove)
+	if selectionMoving and moveDelta != Vector2i.ZERO:
+
+		var ghost = Color(1, 1, 1, 0.55)
+
+		for cell in moveTiles:
+			var target = Vector2((cell + moveDelta) * CELL)
+			c.draw_texture_rect_region(TILESET_TEXTURE, Rect2(target, Vector2(CELL, CELL)), Rect2(Vector2(moveTiles[cell] * CELL), Vector2(CELL, CELL)), ghost)
+
+		for cell in moveObjects:
+
+			var data = moveObjects[cell]
+			var texture = objectGhostTexture(data.type, data.variant)
+			var tint = Color(0.2, 0.55, 0.28, ghost.a) if data.type == "greenHuman" else ghost # GreenHuman.tscn 실루엣 tint와 같은 색
+			var center = cellCenter(cell + moveDelta) + objectGhostOffset(data.type)
+
+			c.draw_texture_rect(texture, Rect2(center - texture.get_size() * 0.5, texture.get_size()), false, tint)
+
+		# 놓으면 내용이 들어갈 목적지 테두리
+		c.draw_rect(Rect2(Vector2((selectionRect.position + moveDelta) * CELL), Vector2(selectionRect.size * CELL)), Color(1, 0.95, 0.6, 0.9), false)
 
 func refresh():
 	queue_redraw()
@@ -1011,7 +1257,8 @@ func buildUI():
 [Q] 용암 가득  [W] 용암 높게  [E] 용암 낮게
 [R] 원웨이 발판 (칸 위 경계)
 [T] 초록 인간
-[방향키] 맵 전체 1칸 이동
+[S] 선택 / 이동 (영역 드래그)
+[방향키] 맵 전체 1칸 이동 (선택 시 선택만)
 좌클릭 배치 · 우클릭 삭제
 휠 줌 · 휠 드래그 이동", 15)
 	help.modulate = Color(1, 1, 1, 0.6)
@@ -1084,6 +1331,8 @@ func toolIconTexture(toolId):
 
 	var info = toolInfo[toolId]
 
+	if toolId == Tool.SELECT:
+		return selectionIconTexture()
 	if info.has("tile"):
 		return atlasIcon(Rect2(Vector2(tileTypes[info.tile] * CELL), Vector2(CELL, CELL)))
 	if info.has("fruit"):
@@ -1115,6 +1364,40 @@ func atlasIcon(region):
 	icon.region = region
 
 	return icon
+
+# 선택 도구 아이콘 — 전용 텍스처가 없어 점선 사각형을 코드로 그린다
+func selectionIconTexture():
+
+	var image = Image.create_empty(CELL, CELL, false, Image.FORMAT_RGBA8)
+
+	for i in CELL:
+
+		if i % 4 >= 2: # 2px 켜고 2px 꺼서 점선
+			continue
+
+		for pixel in [Vector2i(i, 0), Vector2i(i, CELL - 1), Vector2i(0, i), Vector2i(CELL - 1, i)]:
+			image.set_pixelv(pixel, Color.WHITE)
+
+	return ImageTexture.create_from_image(image)
+
+# 이동 고스트용 — 오브젝트가 실제로 쓰는 텍스처 (toolIconTexture와 같은 원리)
+func objectGhostTexture(type, variant):
+
+	match type:
+		"fruit":
+			return FRUIT_SCRIPT.TEXTURES[FRUIT_STATES[variant]]
+		"water":
+			return Water.LEVELS[WATER_LEVELS[variant]].texture
+		"lava":
+			return Lava.LEVELS[LAVA_LEVELS[variant]].texture
+		"oneWayPlatform":
+			return ONE_WAY_PLATFORM_TEXTURE
+
+	return PLAYER_FRAMES.get_frame_texture("idle", 0) # greenHuman — 플레이어 모습
+
+# 셀 중심에서 스프라이트가 벗어난 거리 — 원웨이 발판은 칸 위 경계선에 걸친다 (OneWayPlatform.tscn의 Sprite offset)
+func objectGhostOffset(type):
+	return Vector2(0, -8) if type == "oneWayPlatform" else Vector2.ZERO
 
 # ◀ ▶ 한 번에 한 페이지(PALETTE_ROWS 줄)씩 — 도구가 많아 줄 단위로는 너무 여러 번 눌러야 한다
 func scrollPalette(direction):
