@@ -14,6 +14,9 @@ extends Node2D
 #  좌클릭: 배치 / 우클릭: 삭제 (오브젝트가 있으면 오브젝트 먼저)
 #  휠: 확대·축소 / 휠 버튼 드래그: 화면 이동
 #  방향키: 맵 전체를 1칸씩 이동 (경계 밖으로 나간 타일/오브젝트는 잘린다)
+#  좌측 패널 팔레트(5x3 격자): 아이콘을 클릭해 도구 선택 — 위 단축키와 병행.
+#  타일셋(tilemap.png)의 모든 타일이 도구로 자동 등록되고,
+#  지형(충돌 타일) -> 장식(통과 타일) -> 오브젝트 묶음 순으로 정렬된다. ◀ ▶로 페이지 넘기기
 #  TAB: 에디터 <-> 플레이 모드 전환 (ESC: 플레이 종료)
 #  F11: 전체화면 <-> 창 모드 전환
 #
@@ -33,6 +36,11 @@ const CLING_PLATFORM_SCENE = preload("res://platform/ClingPlatform.tscn")
 const GREEN_HUMAN_SCENE = preload("res://npc/GreenHuman.tscn")
 const PLAYER_SCENE = preload("res://Player/ColorPlayer.tscn")
 
+# 팔레트 아이콘용 리소스 — 오브젝트가 실제로 쓰는 텍스처를 아이콘으로 재사용한다
+const FRUIT_SCRIPT = preload("res://Scripts/fruit.gd") # class_name이 없어 스크립트로 텍스처 테이블(TEXTURES)을 참조
+const TILESET_TEXTURE = preload("res://Sprites/tilemap.png")
+const PLAYER_FRAMES = preload("res://Sprites/player.tres")
+
 const CELL = 16
 const TILE_SOURCE = 0
 const MIN_SIZE = 4
@@ -43,7 +51,8 @@ const MAX_SIZE = 1000 # 격자 오버레이가 매 프레임 (가로+세로)줄�
 # 플레이 모드에서는 게임 해상도로 되돌린다 — 실제 게임과 같은 시야로 테스트하기 위해 (startPlay/stopPlay)
 const EDITOR_RESOLUTION = Vector2i(1920, 1080)
 
-# 타일 종류 -> 타일셋 아틀라스 좌표
+# 이름 있는 기본 타일 -> 타일셋 아틀라스 좌표. 저장 포맷(type 문자열)과 도구 단축키가 이 이름을 쓴다.
+# 타일셋의 나머지 타일 전부는 buildTileTools()가 "tile_x_y" 이름으로 tileTypes에 자동 추가한다
 const TILE_TYPES = {
 	"floor": Vector2i(4, 0), # 풀이 덮인 바닥
 	"wall": Vector2i(4, 2), # 속이 채워진 벽
@@ -92,6 +101,11 @@ const TOOL_INFO = {
 	Tool.GREEN_HUMAN: { "name": "초록 인간", "greenHuman": "default" },
 }
 
+# 도구 팔레트 — 5 x 3 격자. 도구가 격자보다 많아지면 ◀ ▶로 줄 단위 스크롤
+const PALETTE_COLUMNS = 5
+const PALETTE_ROWS = 3
+const PALETTE_ICON_SIZE = 40 # 아이콘 버튼 한 변 px
+
 # 맵 저장 폴더 — 에디터 실행 시에는 프로젝트 폴더, export 빌드에서는 사용자 데이터 폴더
 var mapsDir = "res://maps" if OS.has_feature("editor") else "user://maps"
 
@@ -105,6 +119,11 @@ var mapsDir = "res://maps" if OS.has_feature("editor") else "user://maps"
 
 var mode = Mode.EDIT
 var currentTool = Tool.FLOOR
+
+# 타일셋의 모든 타일을 도구로 쓰기 위한 런타임 확장 테이블 (buildTileTools에서 채움).
+# 코드 곳곳에서는 상수 대신 이쪽을 쓴다 — 이름 있는 항목(TILE_TYPES/TOOL_INFO) + 자동 생성된 타일 항목
+var tileTypes = {}
+var toolInfo = {}
 
 var mapWidth = 40
 var mapHeight = 15
@@ -131,6 +150,12 @@ var toolLabel
 var statusLabel
 var playHint
 var fullscreenButton
+var paletteButtons = {} # 도구 id -> 팔레트 아이콘 버튼 (선택 강조/스크롤 갱신용)
+var paletteSlots = [] # 격자 칸 순서대로의 도구 id, -1은 빈 칸 — 묶음 줄맞춤용 (buildTileTools에서 채움)
+var paletteSlotControls = [] # paletteSlots와 같은 순서의 버튼/빈 칸 컨트롤 (buildUI에서 채움)
+var paletteStartRow = 0 # 팔레트 격자에 보이는 첫 줄 (도구가 격자보다 많을 때만 의미 있다)
+var paletteLeft
+var paletteRight
 
 # 격자·시작 지점 등을 타일 위에 겹쳐 그리는 오버레이
 class EditorOverlay extends Node2D:
@@ -156,6 +181,7 @@ func _ready():
 	# 에디터 카메라는 마우스로 직접 움직이므로 물리 보간에서 제외
 	camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
+	buildTileTools()
 	buildUI()
 
 	# 가장 최근에 저장한 맵이 있으면 자동으로 불러온다
@@ -169,6 +195,105 @@ func _ready():
 
 	selectTool(Tool.FLOOR)
 
+# 도구 목록 — 타일셋 아틀라스에 정의된 모든 타일을 도구로 등록하고 팔레트 순서를 정한다.
+# TILE_TYPES에 이름이 있는 타일은 그 이름 그대로(저장 포맷·단축키 유지),
+# 나머지는 "tile_x_y" 이름과 이어지는 도구 id로 팔레트에만 추가된다 (단축키 없음).
+# 팔레트는 지형(충돌 타일) -> 장식(통과 타일) -> 오브젝트 묶음 순이고,
+# 묶음이 끝나면 빈 칸(-1)으로 채워 다음 묶음이 새 줄에서 시작한다
+
+func buildTileTools():
+
+	tileTypes = TILE_TYPES.duplicate()
+	toolInfo = TOOL_INFO.duplicate()
+
+	var source = tileMap.tile_set.get_source(TILE_SOURCE)
+
+	# 빈(전부 투명) 칸을 걸러내기 위해 아틀라스 이미지를 읽어 둔다
+	var image = TILESET_TEXTURE.get_image()
+	if image.is_compressed():
+		image.decompress()
+
+	# 타일 도구를 충돌 유무로 나눠 모은다 — [아틀라스 좌표, 도구 id] 쌍 (좌표순 정렬용)
+	var solidTiles = []
+	var decorTiles = []
+
+	var nextId = Tool.size() # 생성 도구 id는 enum 값(0부터 연속)과 겹치지 않게 그 다음부터
+
+	for i in source.get_tiles_count():
+
+		var coords = source.get_tile_id(i)
+
+		if tileIsEmpty(image, coords):
+			continue
+
+		# 충돌 폴리곤이 없는 타일은 밟을 수 없는 배경 장식 — 묶음과 툴팁으로 구분해 준다
+		var solid = source.get_tile_data(coords, 0).get_collision_polygons_count(0) > 0
+		var toolId = namedTileTool(coords)
+
+		if toolId == -1:
+			toolId = nextId
+			nextId += 1
+
+			var typeName = "tile_%d_%d" % [coords.x, coords.y]
+			tileTypes[typeName] = coords
+			toolInfo[toolId] = { "name": "타일 (%d, %d)%s" % [coords.x, coords.y, "" if solid else " — 장식(통과)"], "tile": typeName }
+
+		if solid:
+			solidTiles.append([coords, toolId])
+		else:
+			decorTiles.append([coords, toolId])
+
+	# 시트에서 보이는 위치(위->아래, 왼->오른쪽) 순으로 — 상자 조각들이 흩어지지 않게
+	var byCoords = func(a, b): return a[0].y < b[0].y or (a[0].y == b[0].y and a[0].x < b[0].x)
+	solidTiles.sort_custom(byCoords)
+	decorTiles.sort_custom(byCoords)
+
+	# 오브젝트 묶음 — 비슷한 것끼리. 목록에 빠진 새 오브젝트 도구가 있으면 뒤에 자동으로 붙는다
+	var objectTools = [
+		Tool.FRUIT_RED, Tool.FRUIT_BLUE, Tool.FRUIT_GREEN,
+		Tool.WATER_FULL, Tool.WATER_HIGH, Tool.WATER_LOW,
+		Tool.LAVA_FULL, Tool.LAVA_HIGH, Tool.LAVA_LOW,
+		Tool.CLING_PLATFORM, Tool.GREEN_HUMAN, Tool.PLAYER_START,
+	]
+
+	for toolId in Tool.values():
+		if !TOOL_INFO[toolId].has("tile") and !objectTools.has(toolId):
+			objectTools.append(toolId)
+
+	paletteSlots = []
+
+	for group in [solidTiles.map(func(entry): return entry[1]), decorTiles.map(func(entry): return entry[1]), objectTools]:
+
+		paletteSlots.append_array(group)
+
+		# 남은 칸을 비워 다음 묶음이 새 줄에서 시작하게
+		while paletteSlots.size() % PALETTE_COLUMNS != 0:
+			paletteSlots.append(-1)
+
+# 이름 있는 타일(TILE_TYPES)을 쓰는 기존 enum 도구 id — 없으면 -1
+
+func namedTileTool(coords):
+
+	for toolId in TOOL_INFO:
+
+		var info = TOOL_INFO[toolId]
+
+		if info.has("tile") and TILE_TYPES[info.tile] == coords:
+			return toolId
+
+	return -1
+
+# 아틀라스의 한 칸이 전부 투명한지 — 팔레트에 빈 도구가 생기지 않게 거른다
+
+func tileIsEmpty(image, coords):
+
+	for y in CELL:
+		for x in CELL:
+			if image.get_pixel(coords.x * CELL + x, coords.y * CELL + y).a > 0:
+				return false
+
+	return true
+
 # 맵 관리
 
 func newMap(width, height):
@@ -181,8 +306,8 @@ func newMap(width, height):
 
 	# 시작용 바닥 두 줄
 	for x in range(mapWidth):
-		tileMap.set_cell(Vector2i(x, mapHeight - 2), TILE_SOURCE, TILE_TYPES["floor"])
-		tileMap.set_cell(Vector2i(x, mapHeight - 1), TILE_SOURCE, TILE_TYPES["wall"])
+		tileMap.set_cell(Vector2i(x, mapHeight - 2), TILE_SOURCE, tileTypes["floor"])
+		tileMap.set_cell(Vector2i(x, mapHeight - 1), TILE_SOURCE, tileTypes["wall"])
 
 	playerStartCell = Vector2i(2, mapHeight - 4)
 
@@ -352,7 +477,13 @@ func mouseCell():
 func selectTool(newTool):
 
 	currentTool = newTool
-	toolLabel.text = "도구: " + TOOL_INFO[newTool].name
+	toolLabel.text = "도구: " + toolInfo[newTool].name
+
+	# 단축키로 선택해도 팔레트가 따라가도록 — 선택 도구가 격자 밖이면 보이는 줄로 스크롤
+	@warning_ignore("integer_division")
+	var row = paletteSlots.find(newTool) / PALETTE_COLUMNS
+	paletteStartRow = clampi(paletteStartRow, row - PALETTE_ROWS + 1, row)
+	syncPalette()
 
 # 배치 / 삭제
 
@@ -369,10 +500,10 @@ func paint(cell, erase):
 		refresh()
 		return
 
-	var info = TOOL_INFO[currentTool]
+	var info = toolInfo[currentTool]
 
 	if info.has("tile"):
-		tileMap.set_cell(cell, TILE_SOURCE, TILE_TYPES[info.tile])
+		tileMap.set_cell(cell, TILE_SOURCE, tileTypes[info.tile])
 	elif info.has("fruit"):
 		placeObject(cell, "fruit", info.fruit)
 	elif info.has("water"):
@@ -573,8 +704,8 @@ func writeMap(fileName):
 
 		var atlas = tileMap.get_cell_atlas_coords(cell)
 
-		for typeName in TILE_TYPES:
-			if TILE_TYPES[typeName] == atlas:
+		for typeName in tileTypes:
+			if tileTypes[typeName] == atlas:
 				data.tiles.append({ "x": cell.x, "y": cell.y, "type": typeName })
 				break
 
@@ -625,8 +756,8 @@ func loadMap():
 
 		var cell = Vector2i(int(tile.x), int(tile.y))
 
-		if isInside(cell) and TILE_TYPES.has(tile.get("type", "")):
-			tileMap.set_cell(cell, TILE_SOURCE, TILE_TYPES[tile.type])
+		if isInside(cell) and tileTypes.has(tile.get("type", "")):
+			tileMap.set_cell(cell, TILE_SOURCE, tileTypes[tile.type])
 
 	for object in data.get("objects", []):
 
@@ -842,6 +973,38 @@ func buildUI():
 	toolLabel = makeLabel("", 18)
 	box.add_child(toolLabel)
 
+	# 도구 팔레트 — 5x3 격자에서 아이콘을 클릭해 도구 선택 (아래 단축키와 병행).
+	# 타일셋의 모든 타일이 도구라 격자에 다 안 들어간다 — ◀ ▶로 페이지 넘기기 (scrollPalette)
+	var paletteRow = HBoxContainer.new()
+	box.add_child(paletteRow)
+
+	paletteLeft = makeButton("◀")
+	paletteLeft.pressed.connect(func(): scrollPalette(-1))
+	paletteRow.add_child(paletteLeft)
+
+	var paletteGrid = GridContainer.new()
+	paletteGrid.columns = PALETTE_COLUMNS
+	paletteRow.add_child(paletteGrid)
+
+	for slotId in paletteSlots:
+
+		if slotId == -1:
+			# 묶음 줄맞춤용 빈 칸
+			var spacer = Control.new()
+			spacer.custom_minimum_size = Vector2(PALETTE_ICON_SIZE, PALETTE_ICON_SIZE)
+			paletteGrid.add_child(spacer)
+			paletteSlotControls.append(spacer)
+			continue
+
+		var toolButton = makePaletteButton(slotId)
+		paletteButtons[slotId] = toolButton
+		paletteGrid.add_child(toolButton)
+		paletteSlotControls.append(toolButton)
+
+	paletteRight = makeButton("▶")
+	paletteRight.pressed.connect(func(): scrollPalette(1))
+	paletteRow.add_child(paletteRight)
+
 	var help = makeLabel("[1] 바닥  [2] 벽
 [3] 빨강  [4] 파랑  [5] 초록
 [6] 시작 지점
@@ -894,6 +1057,95 @@ func makeButton(text):
 	button.focus_mode = Control.FOCUS_NONE
 
 	return button
+
+# 도구 팔레트
+
+func makePaletteButton(toolId):
+
+	var button = Button.new()
+	button.toggle_mode = true # 선택된 도구를 눌린 상태로 강조 (실제 토글은 syncPalette가 관리)
+	button.focus_mode = Control.FOCUS_NONE
+	button.custom_minimum_size = Vector2(PALETTE_ICON_SIZE, PALETTE_ICON_SIZE)
+	button.icon = toolIconTexture(toolId)
+	button.expand_icon = true
+	button.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST # 16px 픽셀아트가 확대돼도 흐려지지 않게
+	button.tooltip_text = toolInfo[toolId].name
+	button.pressed.connect(func(): selectTool(toolId))
+
+	var tint = toolIconTint(toolId)
+
+	if tint != Color.WHITE:
+		for colorName in ["icon_normal_color", "icon_hover_color", "icon_pressed_color", "icon_hover_pressed_color"]:
+			button.add_theme_color_override(colorName, tint)
+
+	return button
+
+# 도구 -> 아이콘 텍스처. 게임 오브젝트가 실제로 쓰는 텍스처를 그대로 가져와
+# 에디터에 보이는 모습과 항상 일치한다 (타일/매달림 발판은 아틀라스에서 잘라 쓴다)
+func toolIconTexture(toolId):
+
+	var info = toolInfo[toolId]
+
+	if info.has("tile"):
+		return atlasIcon(Rect2(Vector2(tileTypes[info.tile] * CELL), Vector2(CELL, CELL)))
+	if info.has("fruit"):
+		return FRUIT_SCRIPT.TEXTURES[FRUIT_STATES[info.fruit]]
+	if info.has("water"):
+		return Water.LEVELS[WATER_LEVELS[info.water]].texture
+	if info.has("lava"):
+		return Lava.LEVELS[LAVA_LEVELS[info.lava]].texture
+	if info.has("clingPlatform"):
+		return atlasIcon(Rect2(112, 16, 16, 4)) # ClingPlatform.tscn 스프라이트와 같은 영역
+
+	return PLAYER_FRAMES.get_frame_texture("idle", 0) # 시작 지점 / 초록 인간 — 플레이어 모습
+
+# 플레이어 스프라이트를 쓰는 아이콘의 물들임 색 (나머지 도구는 원본 색 그대로)
+func toolIconTint(toolId):
+
+	match toolId:
+		Tool.PLAYER_START:
+			return Color(1, 0.95, 0.6) # 오버레이의 시작 지점 유령 상자와 같은 색
+		Tool.GREEN_HUMAN:
+			return Color(0.2, 0.55, 0.28) # GreenHuman.tscn 실루엣 tint와 같은 색
+
+	return Color.WHITE
+
+func atlasIcon(region):
+
+	var icon = AtlasTexture.new()
+	icon.atlas = TILESET_TEXTURE
+	icon.region = region
+
+	return icon
+
+# ◀ ▶ 한 번에 한 페이지(PALETTE_ROWS 줄)씩 — 도구가 많아 줄 단위로는 너무 여러 번 눌러야 한다
+func scrollPalette(direction):
+
+	paletteStartRow += direction * PALETTE_ROWS
+	syncPalette()
+
+# 팔레트 격자 위치를 범위에 맞추고, 보이는 아이콘과 선택 강조를 갱신한다.
+# 모든 도구가 격자에 들어가는 동안에는 ◀ ▶ 버튼을 숨긴다
+func syncPalette():
+
+	var totalRows = ceili(paletteSlots.size() / float(PALETTE_COLUMNS))
+	var maxStartRow = maxi(totalRows - PALETTE_ROWS, 0)
+
+	paletteStartRow = clampi(paletteStartRow, 0, maxStartRow)
+
+	var first = paletteStartRow * PALETTE_COLUMNS
+	var last = first + PALETTE_ROWS * PALETTE_COLUMNS
+
+	for i in paletteSlotControls.size():
+		paletteSlotControls[i].visible = i >= first and i < last # 숨긴 컨트롤은 격자 칸을 차지하지 않는다
+
+	for toolId in paletteButtons:
+		paletteButtons[toolId].set_pressed_no_signal(toolId == currentTool)
+
+	paletteLeft.visible = maxStartRow > 0
+	paletteRight.visible = maxStartRow > 0
+	paletteLeft.disabled = paletteStartRow == 0
+	paletteRight.disabled = paletteStartRow >= maxStartRow
 
 # 타이핑 중인 크기 값을 확정한다.
 # 버튼이 포커스를 가져가지 않아(FOCUS_NONE) SpinBox가 입력 텍스트를 value에

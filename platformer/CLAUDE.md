@@ -65,7 +65,7 @@ UI 전부를 코드로 생성하는 단일 스크립트. 알아야 할 것:
 - `objects` 딕셔너리(셀 → type/variant/node)가 원본 데이터이고 노드는 `rebuildObjects()`로 언제든 재생성된다 — 플레이 중 먹힌 과일 복원도 이 방식
 - 플레이 모드는 `ColorPlayer.tscn`을 인스턴스화하고 `resetY`를 맵 높이에 맞춰 넘긴다
 - 에디터는 `EDITOR_RESOLUTION`(1920x1080)으로 동작하고(`content_scale_size`를 런타임에 변경), 플레이 모드에서는 project.godot의 게임 해상도로 복원해 실제 게임과 같은 시야로 테스트한다
-- 셀 크기 16px, 타일 종류 추가는 `TILE_TYPES`(아틀라스 좌표)와 `TOOL_INFO`에 항목 추가
+- 셀 크기 16px. 타일셋(`Sprites/tilemap.tres`)의 모든 타일은 `buildTileTools()`가 `tile_x_y` 이름으로 자동 등록해 팔레트(5x3 격자, ◀ ▶ 페이지 넘김)에 나온다 — 지형(충돌)→장식(통과)→오브젝트 묶음 순 정렬이고 묶음마다 새 줄에서 시작. 이름·단축키가 필요한 타일만 `TILE_TYPES`와 `TOOL_INFO`에 항목 추가 (저장 포맷의 type 문자열이 이 이름이므로 기존 이름 변경 금지)
 - 조작법 전체(도구 단축키 1~0·Q/W/E, 방향키 맵 이동, F11 등)는 `map_editor.gd` 상단 주석에 있다 — 도구를 추가하면 그 주석과 `buildUI()`의 도움말 텍스트도 함께 갱신할 것
 
 ### 입력 액션 (project.godot)

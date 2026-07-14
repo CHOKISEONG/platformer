@@ -250,9 +250,9 @@ func launch(power):
 
 # 초록 상태 천장 밀착: 상승 중 천장에 닿으면 매달린다 (applyGravity에서 시작).
 # 매달린 동안에도 좌우 이동은 그대로 가능해 천장을 타고 움직일 수 있다.
-# 점프 키로는 해제되지 않는다 — 매달려 건너는 도중 점프 입력으로 실수로 떨어지지 않게.
-# 천장이 끝나 접촉이 사라지거나 상태가 바뀌면(과일/사망)
-# 점프 정점에서 내려올 때와 같은 곡선(gravity 0부터 가속)으로 떨어진다.
+# 점프 키를 다시 누르면 손을 놓고 떨어진다. 그 외에는 천장이 끝나 접촉이 사라지거나
+# 상태가 바뀔 때(과일/사망) 떨어지며, 어느 경우든
+# 점프 정점에서 내려올 때와 같은 곡선(gravity 0부터 가속)으로 하강한다.
 
 func applyCling(delta):
 
@@ -261,6 +261,14 @@ func applyCling(delta):
 
 	if STATS[state].ability != "cling":
 		clinging = false
+		return
+
+	# 매달린 도중 점프 키를 다시 누르면 손을 놓는다.
+	# 이 시점 gravity는 applyGravity의 천장 처리로 이미 0 — 정점에서 내려오는 곡선으로 하강하고,
+	# 다음 프레임부터는 gravity >= 0이라 applyGravity가 다시 매달리게 하지 않는다
+	if Input.is_action_just_pressed("jump"):
+		clinging = false
+		jumpBufferTimer = 0.0 # 놓기 입력이 낮은 천장에서 착지 버퍼 점프로 이어지지 않게
 		return
 
 	# 이음새에서 접촉 판정이 잠깐 끊겨도 유예 시간 안에 다시 닿으면 매달림이 유지된다.
