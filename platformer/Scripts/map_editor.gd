@@ -6,9 +6,10 @@ extends Node2D
 #  [3] 빨간 과일   [4] 파란 과일   [5] 초록 과일
 #  [6] 플레이어 시작 지점
 #  [7] 물 (가득)   [8] 물 (수면 높게)   [9] 물 (수면 낮게)
-#  [0] 원웨이 블럭 (칸 위) — 아래에서는 통과, 위에서는 착지
 #  [Q] 용암 (가득)   [W] 용암 (수면 높게)   [E] 용암 (수면 낮게)
-#  [R] 매달림 원웨이 — 칸 아래쪽에 붙는 얇은 발판. 점프로 통과하고, 매달린 채 지나갈 수 있다
+#  [R] 원웨이 발판 — 배치 칸과 바로 위 칸 '사이' 경계선에 위·아래 2px씩 걸치는 얇은 발판.
+#      아래에서 점프하면 통과하고 위에서는 밟고 선다. 천장에 매달린 플레이어는 걸리지 않고
+#      지나가며, 머리 높이로 지날 때는 발판 밑면이 천장이 되어 매달린 채 건너갈 수 있다
 #  [T] 초록 인간 — 초록 플레이어가 닿으면 껴안았다 3블럭 위로 띄워 주고, 다른 색이 밟으면 1블럭 튕겨 낸다
 #
 #  좌클릭: 배치 / 우클릭: 삭제 (오브젝트가 있으면 오브젝트 먼저)
@@ -32,15 +33,15 @@ extends Node2D
 const FRUIT_SCENE = preload("res://Fruit/Fruit.tscn")
 const WATER_SCENE = preload("res://water/Water.tscn")
 const LAVA_SCENE = preload("res://lava/Lava.tscn")
-const CLING_PLATFORM_SCENE = preload("res://platform/ClingPlatform.tscn")
+const ONE_WAY_PLATFORM_SCENE = preload("res://platform/OneWayPlatform.tscn")
 const GREEN_HUMAN_SCENE = preload("res://npc/GreenHuman.tscn")
 const PLAYER_SCENE = preload("res://Player/ColorPlayer.tscn")
 
 # 팔레트 아이콘용 리소스 — 오브젝트가 실제로 쓰는 텍스처를 아이콘으로 재사용한다
 const FRUIT_SCRIPT = preload("res://Scripts/fruit.gd") # class_name이 없어 스크립트로 텍스처 테이블(TEXTURES)을 참조
 const TILESET_TEXTURE = preload("res://Sprites/tilemap.png")
+const ONE_WAY_PLATFORM_TEXTURE = preload("res://platform/oneway.png") # OneWayPlatform.tscn 스프라이트와 같은 텍스처
 const PLAYER_FRAMES = preload("res://Sprites/player.tres")
-const ROOM_CAMERA_SCRIPT = preload("res://Scripts/room_camera.gd") # class_name이 없어 스크립트로 룸 크기 상수(ROOM_SIZE)를 참조
 
 const CELL = 16
 const TILE_SOURCE = 0
@@ -57,7 +58,6 @@ const EDITOR_RESOLUTION = Vector2i(1920, 1080)
 const TILE_TYPES = {
 	"floor": Vector2i(4, 0), # 풀이 덮인 바닥
 	"wall": Vector2i(4, 2), # 속이 채워진 벽
-	"platform": Vector2i(7, 1), # 얇은 잔디 발판 — 칸 상단만 차지하는 원웨이 플랫폼
 }
 
 # 과일 종류 -> 플레이어 색 상태
@@ -82,7 +82,7 @@ const LAVA_LEVELS = {
 }
 
 enum Mode { EDIT, PLAY }
-enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, PLATFORM, LAVA_FULL, LAVA_HIGH, LAVA_LOW, CLING_PLATFORM, GREEN_HUMAN }
+enum Tool { FLOOR, WALL, FRUIT_RED, FRUIT_BLUE, FRUIT_GREEN, PLAYER_START, WATER_FULL, WATER_HIGH, WATER_LOW, LAVA_FULL, LAVA_HIGH, LAVA_LOW, ONE_WAY_PLATFORM, GREEN_HUMAN }
 
 const TOOL_INFO = {
 	Tool.FLOOR: { "name": "바닥 타일", "tile": "floor" },
@@ -94,11 +94,10 @@ const TOOL_INFO = {
 	Tool.WATER_FULL: { "name": "물 (가득)", "water": "full" },
 	Tool.WATER_HIGH: { "name": "물 (수면 높게)", "water": "high" },
 	Tool.WATER_LOW: { "name": "물 (수면 낮게)", "water": "low" },
-	Tool.PLATFORM: { "name": "원웨이 블럭 (칸 위)", "tile": "platform" },
 	Tool.LAVA_FULL: { "name": "용암 (가득)", "lava": "full" },
 	Tool.LAVA_HIGH: { "name": "용암 (수면 높게)", "lava": "high" },
 	Tool.LAVA_LOW: { "name": "용암 (수면 낮게)", "lava": "low" },
-	Tool.CLING_PLATFORM: { "name": "매달림 원웨이 (칸 아래)", "clingPlatform": "bottom" },
+	Tool.ONE_WAY_PLATFORM: { "name": "원웨이 발판 (칸 위 경계)", "oneWayPlatform": "top" },
 	Tool.GREEN_HUMAN: { "name": "초록 인간", "greenHuman": "default" },
 }
 
@@ -130,7 +129,7 @@ var mapWidth = 40
 var mapHeight = 15
 var playerStartCell = Vector2i(2, 11)
 
-# 셀 좌표(Vector2i) -> { "type": "fruit"|"water"|"lava"|"clingPlatform", "variant": "red"|"full"|..., "node": 인스턴스 }
+# 셀 좌표(Vector2i) -> { "type": "fruit"|"water"|"lava"|"oneWayPlatform"|"greenHuman", "variant": "red"|"full"|..., "node": 인스턴스 }
 # 오브젝트의 원본 데이터. 노드는 이 데이터로부터 언제든 다시 만들어진다.
 var objects = {}
 
@@ -254,7 +253,7 @@ func buildTileTools():
 		Tool.FRUIT_RED, Tool.FRUIT_BLUE, Tool.FRUIT_GREEN,
 		Tool.WATER_FULL, Tool.WATER_HIGH, Tool.WATER_LOW,
 		Tool.LAVA_FULL, Tool.LAVA_HIGH, Tool.LAVA_LOW,
-		Tool.CLING_PLATFORM, Tool.GREEN_HUMAN, Tool.PLAYER_START,
+		Tool.ONE_WAY_PLATFORM, Tool.GREEN_HUMAN, Tool.PLAYER_START,
 	]
 
 	for toolId in Tool.values():
@@ -461,11 +460,10 @@ func handleKey(event):
 		KEY_7: selectTool(Tool.WATER_FULL)
 		KEY_8: selectTool(Tool.WATER_HIGH)
 		KEY_9: selectTool(Tool.WATER_LOW)
-		KEY_0: selectTool(Tool.PLATFORM)
 		KEY_Q: selectTool(Tool.LAVA_FULL)
 		KEY_W: selectTool(Tool.LAVA_HIGH)
 		KEY_E: selectTool(Tool.LAVA_LOW)
-		KEY_R: selectTool(Tool.CLING_PLATFORM)
+		KEY_R: selectTool(Tool.ONE_WAY_PLATFORM)
 		KEY_T: selectTool(Tool.GREEN_HUMAN)
 		KEY_LEFT: shiftMap(Vector2i.LEFT)
 		KEY_RIGHT: shiftMap(Vector2i.RIGHT)
@@ -511,8 +509,8 @@ func paint(cell, erase):
 		placeObject(cell, "water", info.water)
 	elif info.has("lava"):
 		placeObject(cell, "lava", info.lava)
-	elif info.has("clingPlatform"):
-		placeObject(cell, "clingPlatform", info.clingPlatform)
+	elif info.has("oneWayPlatform"):
+		placeObject(cell, "oneWayPlatform", info.oneWayPlatform)
 	elif info.has("greenHuman"):
 		placeObject(cell, "greenHuman", info.greenHuman)
 	elif currentTool == Tool.PLAYER_START:
@@ -543,8 +541,8 @@ func spawnObject(cell, type, variant):
 		"lava":
 			node = LAVA_SCENE.instantiate()
 			node.lavaLevel = LAVA_LEVELS[variant]
-		"clingPlatform":
-			node = CLING_PLATFORM_SCENE.instantiate() # 변형은 아직 bottom 하나뿐
+		"oneWayPlatform":
+			node = ONE_WAY_PLATFORM_SCENE.instantiate() # 변형은 아직 top 하나뿐
 		"greenHuman":
 			node = GREEN_HUMAN_SCENE.instantiate() # 변형은 아직 default 하나뿐
 
@@ -775,8 +773,8 @@ func loadMap():
 			placeObject(cell, "water", object.water)
 		elif type == "lava" and LAVA_LEVELS.has(object.get("lava", "")):
 			placeObject(cell, "lava", object.lava)
-		elif type == "clingPlatform":
-			placeObject(cell, "clingPlatform", "bottom") # 변형은 아직 bottom 하나뿐
+		elif type == "oneWayPlatform":
+			placeObject(cell, "oneWayPlatform", "top") # 변형은 아직 top 하나뿐
 		elif type == "greenHuman":
 			placeObject(cell, "greenHuman", "default") # 변형은 아직 default 하나뿐
 
@@ -852,16 +850,6 @@ func drawOverlay(c):
 		c.draw_line(Vector2(x * CELL, 0), Vector2(x * CELL, mapSize.y), lineColor)
 	for y in range(mapHeight + 1):
 		c.draw_line(Vector2(0, y * CELL), Vector2(mapSize.x, y * CELL), lineColor)
-
-	# 룸 격자 — 룸 카메라가 화면을 나누는 단위(20x15칸 = 320x240px).
-	# 룸 원점은 셀 (0,0) 기준이라 이 격자에 맞춰 만들면 플레이 화면과 정확히 일치한다
-	var roomSize = ROOM_CAMERA_SCRIPT.ROOM_SIZE
-	var roomColor = Color(0.4, 0.7, 1.0, 0.35)
-
-	for x in range(0, mapWidth * CELL + 1, int(roomSize.x)):
-		c.draw_line(Vector2(x, 0), Vector2(x, mapSize.y), roomColor)
-	for y in range(0, mapHeight * CELL + 1, int(roomSize.y)):
-		c.draw_line(Vector2(0, y), Vector2(mapSize.x, y), roomColor)
 
 	# 맵 경계
 	c.draw_rect(Rect2(Vector2.ZERO, mapSize), Color(1, 1, 1, 0.4), false)
@@ -1021,8 +1009,7 @@ func buildUI():
 [6] 시작 지점
 [7] 물 가득  [8] 물 높게  [9] 물 낮게
 [Q] 용암 가득  [W] 용암 높게  [E] 용암 낮게
-[0] 원웨이 블럭 (칸 위)
-[R] 매달림 원웨이 (칸 아래)
+[R] 원웨이 발판 (칸 위 경계)
 [T] 초록 인간
 [방향키] 맵 전체 1칸 이동
 좌클릭 배치 · 우클릭 삭제
@@ -1105,8 +1092,8 @@ func toolIconTexture(toolId):
 		return Water.LEVELS[WATER_LEVELS[info.water]].texture
 	if info.has("lava"):
 		return Lava.LEVELS[LAVA_LEVELS[info.lava]].texture
-	if info.has("clingPlatform"):
-		return atlasIcon(Rect2(112, 16, 16, 4)) # ClingPlatform.tscn 스프라이트와 같은 영역
+	if info.has("oneWayPlatform"):
+		return ONE_WAY_PLATFORM_TEXTURE
 
 	return PLAYER_FRAMES.get_frame_texture("idle", 0) # 시작 지점 / 초록 인간 — 플레이어 모습
 

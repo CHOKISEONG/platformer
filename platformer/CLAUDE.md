@@ -33,12 +33,12 @@ Godot 4.7 (Forward Plus, D3D12) 기반 2D 퍼즐 플랫포머. 어둠 속 실루
 
 | 상태 | 능력 | 구현 상태 |
 |---|---|---|
-| DARK | 점프 불가, 배경색 실루엣 + 빛나는 눈 | 완료 |
+| DARK | 점프 불가, 배경색 실루엣 + 빛나는 눈, 시야 반지름 5칸 — 그 밖은 검은 오버레이(`DarknessOverlay`)로 가려진다 | 완료 |
 | RED | 3블럭 점프 + `"lavaWalk"` 용암 밟기 | 완료 — 용암(`lava.gd`)이 매 프레임 플레이어 상태를 보고 바닥/사망 판정을 전환 |
 | BLUE | 1블럭 점프 + `"freeze"` 물 얼리기 | 완료 — 접촉 기반. 물이 `hasAbility("freeze")`를 확인해 연결된 물 전체를 BFS로 얼린다(`water.gd`), 사망 시 `call_group("water", "unfreeze")` |
-| GREEN | 2블럭 점프 + `"cling"` 천장 매달리기 | 완료 (`applyGravity`에서 시작, `applyCling`에서 유지, 매달린 중 점프 키를 다시 누르면 해제 — 이때 점프 버퍼도 비워 착지 버퍼 점프를 막는다) |
+| GREEN | 2블럭 점프 + `"cling"` 천장 매달리기 | 완료 (`applyGravity`에서 시작, `applyCling`에서 유지, 점프 키로는 해제되지 않고 천장이 끝나거나 상태가 바뀔 때만 떨어진다. 매달린 동안 수평 이동 68% 가속(`CLING_SPEED_MULTIPLIER`), 최대 속도까지 0.3초(`CLING_ACCEL_TIME`)) |
 
-점프는 `gravity = -jumpPower * 8` 방식이고 중력 가속은 `gravityPower`(6.4) — 이 두 수는 짝으로 튜닝돼 있어(최대 높이 유지 + 체공 시간, `gravityPower` 주석 참고) 한쪽만 바꾸면 안 된다. 코요테 타임(0.1s)과 점프 버퍼(0.1s)가 있고, 수평 이동은 lerp가 아닌 `move_toward` 가감속이다 — 이 조작감 코드는 주석에 적힌 이유 없이 단순화하지 말 것.
+점프는 `gravity = -jumpPower * 8` 방식이고 중력 가속은 `gravityPower`(6.4) — 이 두 수는 짝으로 튜닝돼 있어(최대 높이 유지 + 체공 시간, `gravityPower` 주석 참고) 한쪽만 바꾸면 안 된다. 코요테 타임(0.1s)과 점프 버퍼(0.1s)가 있고, 수평 이동은 lerp가 아닌 `move_toward` 가감속이다 — 입력 중에는 `WALK_ACCELERATION`(900), 뗐을 때는 더 약한 `WALK_FRICTION`(400)으로 감속해 멈출 때 살짝 미끄러지는 관성이 있다. 이 조작감 코드는 주석에 적힌 이유 없이 단순화하지 말 것.
 
 상태 변화는 `stateChanged` 시그널로 발신되며 `start.tscn`에서 맵 밝히기(`start.gd`)와 안내 문구(`start_ui.gd`)가 이를 구독한다.
 
@@ -53,7 +53,7 @@ Godot 4.7 (Forward Plus, D3D12) 기반 2D 퍼즐 플랫포머. 어둠 속 실루
 
 과일(`fruit.gd`)·물(`water.gd`)·용암(`lava.gd`) 모두 "종류 enum + 상수 테이블(텍스처/판정)" 패턴으로, `@export` 변수 하나만 지정해 배치한다. 용암 텍스처(`lava/`)는 물 텍스처의 색상만 빨간색으로 돌린 것이라 판정 수치가 물과 동일하다.
 
-매달림 원웨이 플랫폼(`cling_platform.gd`, `platform/ClingPlatform.tscn`)은 칸 아래쪽 4px에 붙는 원웨이 발판 — 아래에서 점프하면 통과하지만, 플레이어가 천장에 매달린(`clinging`) 동안만 양방향 충돌로 바뀌어 매달린 채 좌우로 지나갈 수 있다. 용암처럼 매 프레임 플레이어 상태를 확인하며, 원웨이 특성상 이 발판에서 매달리기를 새로 시작할 수는 없다.
+원웨이 발판(`one_way_platform.gd`, `platform/OneWayPlatform.tscn`)은 배치 칸과 바로 위 칸 '사이' 경계선에 위·아래 2px씩 걸치는 4px 발판. 충돌체가 두 개다: 하단 2px(현재 칸 상단)는 원웨이(`one_way_collision`) 착지 판정으로 윗면이 경계선과 일치해 옆 타일과 단차가 없고, 상단 2px(윗 칸 하단)는 평소 꺼져 있는 매달림 전용 천장으로 플레이어가 매달린(`clinging`) 채 머리 높이(몸 중심이 경계선 아래)로 지나는 동안만 켜져 — 밑면이 옆 천장 타일 밑면과 같은 높이라 — 윗 칸이 비어 있어도 매달림이 끊기지 않는다. 매달렸거나 몸 중심이 경계선 아래면 하단 원웨이를 꺼서 발끝·머리 어느 높이로 가로질러도 걸리지 않는다(매 프레임 플레이어 상태 확인, 용암과 같은 방식). 아래에서 위로는 천장 접촉이 없어 이 발판에서 매달리기를 새로 시작할 수는 없다.
 
 초록 인간(`green_human.gd`, `npc/GreenHuman.tscn`)은 충돌체 없는 Area2D NPC — 플레이어 스프라이트에 실루엣 셰이더를 어두운 초록으로 입히고 표정(`green_human_face.gd`)만 따로 그린다. 초록 플레이어가 닿으면 잠깐 껴안았다가 3블럭 높이(LAUNCH_POWER 26 = RED 점프)로 띄워 주고, 다른 색 플레이어가 밟으면 화난 표정으로 1블럭(BOUNCE_POWER 17 = BLUE 점프) 튕겨 낸다. 플레이어 쪽 훅은 `hold(duration)`(조작·물리 정지)과 `launch(power)`(jumpPower 단위로 발사) — 둘 다 덕 타이핑으로 부른다.
 

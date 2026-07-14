@@ -36,19 +36,29 @@ const STATS = {
 	},
 }
 
-# 초록 상태 천장 밀착: 매달린 동안 천장 쪽으로 눌러주는 속도 px/s.
-# 바닥 밀착(gravity = 10)과 대칭 — 접촉이 끊기지 않을 만큼만 누른다.
-const CLING_PUSH = 10.0
-
-# 매달림 유지 유예: 천장 타일 이음새를 지날 때 is_on_ceiling()이 1~2프레임 끊겨도
-# 이 시간(초) 동안은 계속 위로 밀며 재접촉을 기다린다 — 없으면 이음새마다 가끔 떨어진다.
+# 매달림 유지 유예: 천장 프로브(applyCling의 test_move)가 1~2프레임 빗나가도
+# 이 시간(초) 동안은 같은 높이를 유지하며 다시 닿기를 기다린다 — 좁은 틈은 그냥 지나간다.
 # 코요테 타임과 같은 성격의 관용치. 절반인 이유: 진짜 천장 끝에서는 유예 동안
-# 허공에 떠 있는 것처럼 보이는데, 그 거리(최고 속도 기준 약 4px)를 줄이기 위해
+# 허공에 떠 있는 것처럼 보이는데, 그 거리(매달림 최고 속도 기준 약 7px)를 줄이기 위해
 const CLING_GRACE_TIME = 0.05
+
+# 매달림 이동 배율 — 천장을 타는 동안 수평 이동이 68% 빨라진다 (1.4에서 20% 증량한 값).
+# 초록 기본 88px/s -> 매달림 중 약 148px/s
+const CLING_SPEED_MULTIPLIER = 1.68
+
+# 매달림 가속 시간(초) — 정지에서 매달림 최대 속도까지 걸리는 시간.
+# 가속도가 아닌 시간으로 정의해 속도·배율을 바꿔도 이 시간이 유지된다 (초록 기준 약 493px/s²).
+# 지상(WALK_ACCELERATION, 최대까지 약 0.1초)보다 무겁게, 미끄러지듯 속도가 붙는 느낌
+const CLING_ACCEL_TIME = 0.3
 
 # 수평 가감속 px/s² — lerp와 달리 목표 속도와 0에 정확히 도달해
 # 서브픽셀 속도로 기어가는 구간이 없다
 const WALK_ACCELERATION = 900.0
+
+# 입력을 뗐을 때의 감속(마찰) px/s² — 가속(WALK_ACCELERATION)보다 약하게 잡아
+# 멈출 때 살짝 미끄러지는 관성을 준다. 최고 속도(초록 88px/s) 기준 약 0.22초, 10px(2/3칸) 미끄러짐.
+# 입력 중(방향 전환 포함)에는 여전히 WALK_ACCELERATION이라 조작 반응은 그대로다
+const WALK_FRICTION = 400.0
 
 # 코요테 타임: 바닥에서 떨어진 뒤에도 이 시간(초) 안에는 점프가 된다.
 # 블럭 모서리 끝에서의 극한 점프가 한 프레임 차이로 씹히지 않게 해준다.
@@ -62,6 +72,11 @@ const JUMP_BUFFER_TIME = 0.1
 
 @onready var sprite = $Sprite
 @onready var eyes = $Eyes
+
+# 어둠 상태 시야 제한 — 반지름 5칸(80px) 밖을 전부 가리는 검은 오버레이.
+# 원형 구멍이 뚫린 방사형 그라데이션 스프라이트가 플레이어를 따라다니고(z_index 100),
+# 80~96px 구간에서 부드럽게 어두워진다. DARK 상태에서만 보인다 (setState)
+@onready var darknessOverlay = $DarknessOverlay
 
 # 중력 가속 (프레임당 px/s). jump()의 배수 8과 짝으로 튜닝된 값 —
 # 원래 10·10 조합에서 점프 초속 0.8배, 중력 0.64배로 줄인 것이다.
@@ -130,7 +145,19 @@ func _physics_process(delta):
 
 	# Apply movement
 
-	walkSpeed = move_toward(walkSpeed, moveInput * moveSpeed * 10, WALK_ACCELERATION * delta)
+	var targetSpeed = moveInput * moveSpeed * 10
+
+	# 입력 중에는 가속, 뗐을 때는 더 약한 마찰로 감속 — 살짝 미끄러지는 관성
+	var acceleration = WALK_ACCELERATION if moveInput != 0.0 else WALK_FRICTION
+
+	if clinging:
+		targetSpeed *= CLING_SPEED_MULTIPLIER
+
+		# 매달림 가속은 시간 기준 — 정지에서 시작하면 CLING_ACCEL_TIME초 뒤 최대 속도에 도달
+		if moveInput != 0.0:
+			acceleration = moveSpeed * 10 * CLING_SPEED_MULTIPLIER / CLING_ACCEL_TIME
+
+	walkSpeed = move_toward(walkSpeed, targetSpeed, acceleration * delta)
 	velocity = Vector2(walkSpeed, gravity)
 	move_and_slide()
 
@@ -144,6 +171,7 @@ func setState(newState):
 	clinging = false # 천장에 매달린 채 상태가 바뀌면 떨어진다
 	sprite.material.set_shader_parameter("tint", STATS[state].color)
 	eyes.setGlow(state == ColorState.DARK) # 어둠 상태에서만 눈이 빛난다
+	darknessOverlay.visible = state == ColorState.DARK # 어둠 상태에서는 주변 5칸만 보인다
 
 	stateChanged.emit(state)
 
@@ -250,8 +278,8 @@ func launch(power):
 
 # 초록 상태 천장 밀착: 상승 중 천장에 닿으면 매달린다 (applyGravity에서 시작).
 # 매달린 동안에도 좌우 이동은 그대로 가능해 천장을 타고 움직일 수 있다.
-# 점프 키를 다시 누르면 손을 놓고 떨어진다. 그 외에는 천장이 끝나 접촉이 사라지거나
-# 상태가 바뀔 때(과일/사망) 떨어지며, 어느 경우든
+# 점프 키로는 떨어지지 않는다 — 천장이 끝나 프로브가 빗나가거나 상태가 바뀔 때
+# (과일/사망/붙잡힘)만 떨어지며, 어느 경우든
 # 점프 정점에서 내려올 때와 같은 곡선(gravity 0부터 가속)으로 하강한다.
 
 func applyCling(delta):
@@ -263,17 +291,12 @@ func applyCling(delta):
 		clinging = false
 		return
 
-	# 매달린 도중 점프 키를 다시 누르면 손을 놓는다.
-	# 이 시점 gravity는 applyGravity의 천장 처리로 이미 0 — 정점에서 내려오는 곡선으로 하강하고,
-	# 다음 프레임부터는 gravity >= 0이라 applyGravity가 다시 매달리게 하지 않는다
-	if Input.is_action_just_pressed("jump"):
-		clinging = false
-		jumpBufferTimer = 0.0 # 놓기 입력이 낮은 천장에서 착지 버퍼 점프로 이어지지 않게
-		return
-
-	# 이음새에서 접촉 판정이 잠깐 끊겨도 유예 시간 안에 다시 닿으면 매달림이 유지된다.
-	# 진짜 천장 끝에서는 접촉이 돌아오지 않으므로 유예가 끝나면 떨어진다
-	if is_on_ceiling():
+	# 천장 확인은 접촉(is_on_ceiling) 대신 1px 위 test_move 프로브로 한다.
+	# 위로 밀어붙여 접촉을 유지하면(예전 방식) 타일 이음새의 안쪽 모서리에 캡슐이
+	# 걸려 수평 이동이 미세하게 버벅인다 — 충돌 없이 천장 바로 아래에 띄워 두면
+	# 이음새와 아예 닿지 않아 매끈하게 미끄러진다 (매달린 동안 y가 일정하게 유지된다).
+	# 진짜 천장 끝에서는 프로브가 돌아오지 않으므로 유예가 끝나면 떨어진다
+	if test_move(global_transform, Vector2.UP):
 		clingGraceTimer = CLING_GRACE_TIME
 	else:
 		clingGraceTimer = maxf(clingGraceTimer - delta, 0.0)
@@ -282,7 +305,8 @@ func applyCling(delta):
 			clinging = false # 이 시점 gravity는 0에 가깝다 — 정점에서 내려오는 곡선으로 하강
 			return
 
-	gravity = -CLING_PUSH
+	# 수직 속도 0 고정 — 밀어붙이지 않아도 매달림 유지는 위의 프로브가 담당한다
+	gravity = 0
 
 # Set animations
 

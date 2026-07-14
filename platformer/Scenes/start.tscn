@@ -29,9 +29,6 @@ fruitState = 1
 [node name="Player" parent="." instance=ExtResource("4")]
 position = Vector2(-72, -20)
 
-[node name="Camera" parent="Player" index="3"]
-roomOrigin = Vector2(-144, -128)
-
 [node name="UI" type="CanvasLayer" parent="."]
 script = ExtResource("5")
 
@@ -55,5 +52,3 @@ vertical_alignment = 1
 
 [connection signal="stateChanged" from="Player" to="." method="_on_player_state_changed"]
 [connection signal="stateChanged" from="Player" to="UI" method="_on_player_state_changed"]
-
-[editable path="Player"]

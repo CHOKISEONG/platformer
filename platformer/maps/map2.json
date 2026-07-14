@@ -386,24 +386,6 @@
 			"y": 49
 		},
 		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 261,
-			"y": 55
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 262,
-			"y": 55
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 263,
-			"y": 55
-		},
-		{
 			"fruit": "green",
 			"type": "fruit",
 			"x": 280,
@@ -414,42 +396,6 @@
 			"water": "low",
 			"x": 288,
 			"y": 56
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 262,
-			"y": 46
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 263,
-			"y": 46
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 262,
-			"y": 44
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 263,
-			"y": 44
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 262,
-			"y": 42
-		},
-		{
-			"clingPlatform": "bottom",
-			"type": "clingPlatform",
-			"x": 263,
-			"y": 42
 		},
 		{
 			"type": "water",
@@ -6042,11 +5988,6 @@
 			"y": 55
 		},
 		{
-			"type": "platform",
-			"x": 244,
-			"y": 55
-		},
-		{
 			"type": "floor",
 			"x": 241,
 			"y": 56
@@ -6055,21 +5996,6 @@
 			"type": "floor",
 			"x": 245,
 			"y": 57
-		},
-		{
-			"type": "platform",
-			"x": 246,
-			"y": 57
-		},
-		{
-			"type": "platform",
-			"x": 244,
-			"y": 53
-		},
-		{
-			"type": "platform",
-			"x": 244,
-			"y": 51
 		},
 		{
 			"type": "floor",
@@ -6862,24 +6788,9 @@
 			"y": 50
 		},
 		{
-			"type": "platform",
-			"x": 296,
-			"y": 54
-		},
-		{
 			"type": "floor",
 			"x": 291,
 			"y": 52
-		},
-		{
-			"type": "platform",
-			"x": 292,
-			"y": 52
-		},
-		{
-			"type": "platform",
-			"x": 296,
-			"y": 50
 		},
 		{
 			"type": "floor",
@@ -7197,11 +7108,6 @@
 			"y": 59
 		},
 		{
-			"type": "platform",
-			"x": 247,
-			"y": 57
-		},
-		{
 			"type": "floor",
 			"x": 245,
 			"y": 53
@@ -7340,11 +7246,6 @@
 			"type": "floor",
 			"x": 262,
 			"y": 50
-		},
-		{
-			"type": "platform",
-			"x": 293,
-			"y": 52
 		},
 		{
 			"type": "floor",
@@ -7497,29 +7398,9 @@
 			"y": 58
 		},
 		{
-			"type": "platform",
-			"x": 282,
-			"y": 51
-		},
-		{
-			"type": "platform",
-			"x": 283,
-			"y": 51
-		},
-		{
 			"type": "floor",
 			"x": 280,
 			"y": 51
-		},
-		{
-			"type": "platform",
-			"x": 276,
-			"y": 48
-		},
-		{
-			"type": "platform",
-			"x": 275,
-			"y": 48
 		},
 		{
 			"type": "floor",
@@ -7802,16 +7683,6 @@
 			"y": 55
 		},
 		{
-			"type": "platform",
-			"x": 295,
-			"y": 54
-		},
-		{
-			"type": "platform",
-			"x": 295,
-			"y": 50
-		},
-		{
 			"type": "floor",
 			"x": 297,
 			"y": 52
@@ -8027,31 +7898,11 @@
 			"y": 59
 		},
 		{
-			"type": "platform",
-			"x": 284,
-			"y": 57
-		},
-		{
-			"type": "platform",
-			"x": 283,
-			"y": 57
-		},
-		{
-			"type": "platform",
-			"x": 285,
-			"y": 57
-		},
-		{
 			"type": "floor",
 			"x": 282,
 			"y": 53
 		},
 		{
-			"type": "platform",
-			"x": 286,
-			"y": 57
-		},
-		{
 			"type": "floor",
 			"x": 275,
 			"y": 50
@@ -8090,11 +7941,6 @@
 			"type": "floor",
 			"x": 276,
 			"y": 50
-		},
-		{
-			"type": "platform",
-			"x": 281,
-			"y": 51
 		},
 		{
 			"type": "floor",

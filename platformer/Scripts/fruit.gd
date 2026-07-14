@@ -1,7 +1,7 @@
 extends Area2D
 
 # 먹으면 플레이어를 해당 색 상태로 바꾸는 보석.
-# 이미지는 상태에 따라 자동으로 정해지므로
+# 이미지와 광원 색은 상태에 따라 자동으로 정해지므로
 # 새로 배치할 때는 fruitState만 지정하면 된다.
 # 먹혀도 삭제되지 않고 숨겨진다 — 플레이어가 사망하면 다시 나타난다.
 
@@ -15,6 +15,7 @@ const TEXTURES = {
 }
 
 @onready var sprite = $Sprite
+@onready var light = $Light
 
 var time = 0.0
 var eaten = false
@@ -25,6 +26,7 @@ func _ready():
 
 	if TEXTURES.has(fruitState):
 		sprite.texture = TEXTURES[fruitState]
+		light.color = ColorPlayer.STATS[fruitState].color # 먹으면 변할 실루엣 색과 같은 빛
 
 	time = position.x * 0.05 # 보석마다 흔들림 위상을 다르게
 

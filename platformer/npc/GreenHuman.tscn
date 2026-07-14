@@ -41,7 +41,7 @@ script = ExtResource("4")
 [node name="Light" type="PointLight2D" parent="."]
 energy = 1.5
 texture = SubResource("GradientTexture2D_1")
-texture_scale = 2.0
+texture_scale = 1.0
 
 [node name="Collision" type="CollisionShape2D" parent="."]
 position = Vector2(0, 1)
